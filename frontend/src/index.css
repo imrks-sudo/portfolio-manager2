@@ -1,0 +1,165 @@
+/* Base */
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system;
+}
+
+/* Layout */
+.app {
+  display: flex;
+  min-height: 100vh;
+  background: #f6f8fb;
+}
+
+/* Dark mode */
+.app.dark {
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  padding: 24px;
+  background: #ffffff;
+  border-right: 1px solid #e5e7eb;
+}
+
+.app.dark .sidebar {
+  background: #111827;
+  border-color: #1f2937;
+}
+
+.sidebar h2 {
+  font-size: 18px;
+  margin-bottom: 24px;
+}
+
+.sidebar p {
+  color: #6b7280;
+  margin: 12px 0;
+  cursor: pointer;
+}
+
+.sidebar p:hover {
+  color: #111827;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  padding: 32px;
+}
+
+/* Cards */
+.card {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+/* Dark cards */
+.app.dark .card {
+  background: #1f2937;
+}
+
+/* Flex layout */
+.flex {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+/* Titles */
+h1 {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+h3 {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Values */
+.card p {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  margin-top: 25px;
+  border-collapse: collapse;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.table th {
+  text-align: left;
+  padding: 14px;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f9fafb;
+}
+
+.table td {
+  padding: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Dark table */
+.app.dark .table th {
+  background: #111827;
+}
+
+.app.dark .table td {
+  border-color: #374151;
+}
+
+/* Inputs */
+input, select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  margin-right: 10px;
+}
+
+.app.dark input,
+.app.dark select {
+  background: #111827;
+  border-color: #374151;
+  color: white;
+}
+
+/* Buttons */
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+/* Profit / Loss */
+.green {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.red {
+  color: #dc2626;
+  font-weight: 600;
+}
