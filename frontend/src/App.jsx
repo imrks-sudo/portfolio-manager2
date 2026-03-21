@@ -154,7 +154,7 @@ function App() {
 
         {/* Upload */}
         <div className="card" style={{ marginTop: 10 }}>
-          <h3>Import Zerodha CSV</h3>
+          <h3>Import CSV</h3>
           <input
             type="file"
             accept=".csv"

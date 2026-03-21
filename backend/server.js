@@ -3,7 +3,9 @@ const cors = require("cors");
 const db = require("./db");
 const cron = require("node-cron");
 const YahooFinance = require("yahoo-finance2").default;
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({
+  suppressNotices: ["yahooSurvey"],
+});
 
 const app = express();
 app.use(cors());
@@ -19,34 +21,32 @@ const updatePrices = () => {
     if (err) return console.log(err);
 
     for (let row of rows) {
-      try {
-        const symbol = row.symbol.includes(".")
-          ? row.symbol
-          : row.symbol + ".NS";
+  try {
+    const symbol = row.symbol.trim().toUpperCase() + ".NS";
 
-        const quote = await yahooFinance.quote(symbol);
+    const quote = await yahooFinance.quote(symbol);
 
-        const currentPrice =
-          quote.regularMarketPrice ||
-          row.prevClose ||
-          row.avgPrice ||
-          0;
+    const currentPrice =
+      quote.regularMarketPrice ||
+      row.prevClose ||
+      row.avgPrice ||
+      0;
 
-        db.run(
-          `UPDATE holdings SET prevClose = ? WHERE id = ?`,
-          [currentPrice, row.id],
-          function (err) {
-            if (err) {
-              console.log("DB update failed:", row.symbol);
-            } else {
-              console.log("Updated:", row.symbol, currentPrice);
-            }
-          }
-        );
-      } catch (e) {
-        console.log("Failed for:", row.symbol);
-      }
-    }
+    db.run(
+      `UPDATE holdings SET prevClose = ? WHERE id = ?`,
+      [currentPrice, row.id]
+    );
+
+    console.log("Updated:", row.symbol, currentPrice);
+
+    // ✅ ADD THIS DELAY
+    await new Promise((r) => setTimeout(r, 500));
+
+  } catch (e) {
+  console.log("Failed for:", row.symbol);
+  console.log("Error:", e.message);
+}
+}
   });
 };
 
@@ -55,6 +55,7 @@ cron.schedule("15 9 * * 1-5", updatePrices);
 
 // 🕞 Market close
 cron.schedule("30 15 * * 1-5", updatePrices);
+
 
 /**
  * ✅ GET PORTFOLIO (FIXED - NO 404)
