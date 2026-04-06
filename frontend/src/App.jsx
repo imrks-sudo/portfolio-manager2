@@ -5,6 +5,7 @@ import {
   deleteHolding,
   updateHolding,
   replacePortfolio,
+  updatePrices,
 } from "./api";
 import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import Papa from "papaparse";
@@ -35,6 +36,17 @@ function App() {
       console.error("Error fetching data:", err);
     }
   };
+
+  const handleUpdatePrices = async () => {
+  try {
+    await updatePrices();
+    await fetchData();
+    alert("Prices updated ✅");
+  } catch (err) {
+    console.error(err);
+    alert("Price update failed ❌");
+  }
+};
 
   useEffect(() => {
     fetchData();
@@ -69,21 +81,40 @@ function App() {
         console.log("Parsed CSV:", results.data);
 
         const payloads = results.data
-          .map((row) => ({
-            symbol: row["Symbol"]?.trim(),
-            sector: row["Sector"],
-            quantity: Number(row["Quantity Available"]),
-            avgPrice: Number(row["Average Price"]),
-            prevClose: Number(row["Previous Closing Price"]),
-            pnl: Number(row["Unrealized P&L"]),
-            pnlPct: Number(row["Unrealized P&L Pct."]),
-          }))
-          .filter((p) => p.symbol && p.quantity);
+  .map((row) => {
+    const symbol = row["Symbol"]?.trim();
+
+    const quantity =
+      Number(row["Quantity Available"] || row["Qty"] || row["Units"]) || 0;
+
+    const avgPrice =
+      Number(row["Average Price"] || row["Buy avg."] || row["Avg NAV"])|| 0;
+
+    const prevClose = 0;
+
+    // 🔥 detect MF vs stock
+    const isMF =
+      symbol &&
+      (symbol.toLowerCase().includes("fund") ||
+        symbol.toLowerCase().includes("etf") ||
+        symbol.toLowerCase().includes("plan"));
+
+    return {
+      symbol,
+      quantity,
+      avgPrice,
+      prevClose,
+      sector:
+        row["Sector"] ||
+        (isMF ? detectMFCategory(symbol) : row["Sector"]),
+    };
+  })
+  .filter((p) => p.symbol && p.quantity);
 
         console.log("Uploading:", payloads.length, "stocks");
 
         try {
-          await replacePortfolio(payloads); // ✅ FULL SYNC
+          await Promise.all(payloads.map(p => addHolding(p)));
           await fetchData();
           alert("Portfolio synced successfully 🚀");
         } catch (err) {
@@ -93,6 +124,28 @@ function App() {
       },
     });
   };
+
+        function detectMFCategory(symbol) {
+  const name = symbol.toLowerCase();
+
+  const map = [
+    { key: "arbitrage", value: "Arbitrage" },
+    { key: "flexi", value: "Flexi Cap" },
+    { key: "multi", value: "Multi Cap" },
+    { key: "large", value: "Large Cap" },
+    { key: "mid", value: "Mid Cap" },
+    { key: "small", value: "Small Cap" },
+    { key: "index", value: "Index" },
+    { key: "etf", value: "ETF" },
+    { key: "liquid", value: "Liquid" },
+  ];
+
+  for (let m of map) {
+    if (name.includes(m.key)) return m.value;
+  }
+
+  return "Others";
+}
 
   // 📊 Charts
   const chartData = data.map((d) => ({
@@ -165,6 +218,13 @@ function App() {
             }}
           />
         </div>
+
+        <div className="card" style={{ marginTop: 10 }}>
+  <h3>Market Data</h3>
+  <button onClick={handleUpdatePrices}>
+    🔄 Update Prices
+  </button>
+</div> 
 
         {/* Cards */}
         <div className="flex" style={{ marginTop: 20 }}>
@@ -295,7 +355,7 @@ function App() {
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan="9">No data</td>
+                <td colSpan="10">No data</td>
               </tr>
             ) : (
               data.map((d) => (

@@ -35,3 +35,6 @@ export const deleteHolding = (id) =>
  */
 export const updateHolding = (id, data) =>
   axios.put(`${API}/${id}`, data);
+
+export const updatePrices = () =>
+  axios.get("http://localhost:5000/prices/update");

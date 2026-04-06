@@ -1,12 +1,9 @@
+const fetch = require("node-fetch");
+global.fetch = fetch;
 const express = require("express");
 const cors = require("cors");
 const db = require("./db");
-const cron = require("node-cron");
-const YahooFinance = require("yahoo-finance2").default;
-const yahooFinance = new YahooFinance({
-  suppressNotices: ["yahooSurvey"],
-});
-
+const axios = require("axios");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -21,41 +18,34 @@ const updatePrices = () => {
     if (err) return console.log(err);
 
     for (let row of rows) {
-  try {
-    const symbol = row.symbol.trim().toUpperCase() + ".NS";
+      try {
+        const symbol = row.symbol.trim().toUpperCase() + ".NS";
 
-    const quote = await yahooFinance.quote(symbol);
+        const quote = await yahooFinance.quote(symbol);
 
-    const currentPrice =
-      quote.regularMarketPrice ||
-      row.prevClose ||
-      row.avgPrice ||
-      0;
+        const currentPrice =
+          quote.regularMarketPrice ||
+          row.prevClose ||
+          row.avgPrice ||
+          0;
 
-    db.run(
-      `UPDATE holdings SET prevClose = ? WHERE id = ?`,
-      [currentPrice, row.id]
-    );
+        db.run(
+          `UPDATE holdings SET prevClose = ? WHERE id = ?`,
+          [currentPrice, row.id]
+        );
 
-    console.log("Updated:", row.symbol, currentPrice);
+        console.log("Updated:", row.symbol, currentPrice);
 
-    // ✅ ADD THIS DELAY
-    await new Promise((r) => setTimeout(r, 500));
+        // ✅ ADD THIS DELAY
+        await new Promise((r) => setTimeout(r, 500));
 
-  } catch (e) {
-  console.log("Failed for:", row.symbol);
-  console.log("Error:", e.message);
-}
-}
+      } catch (e) {
+        console.log("Failed for:", row.symbol);
+        console.log("Error:", e.message);
+      }
+    }
   });
 };
-
-// 🕘 Market open
-cron.schedule("15 9 * * 1-5", updatePrices);
-
-// 🕞 Market close
-cron.schedule("30 15 * * 1-5", updatePrices);
-
 
 /**
  * ✅ GET PORTFOLIO (FIXED - NO 404)
@@ -138,17 +128,6 @@ app.post("/portfolio/replace", (req, res) => {
   const placeholders = symbols.map(() => "?").join(",");
 
   db.serialize(() => {
-    db.run(
-      `DELETE FROM holdings WHERE symbol NOT IN (${placeholders})`,
-      symbols,
-      (err) => {
-        if (err) {
-          console.error("Delete error:", err);
-          return res.status(500).json(err);
-        }
-      }
-    );
-
     // 🔁 Step 2: Upsert all
     const stmt = db.prepare(`
       INSERT INTO holdings (symbol, quantity, avgPrice, sector, prevClose)
@@ -214,6 +193,106 @@ app.put("/portfolio/:id", (req, res) => {
   );
 });
 
+/**
+ * 🔄 MANUAL PRICE UPDATE
+ */
+app.get("/prices/update", async (req, res) => {
+  console.log("Manual price update...");
+
+  try {
+    const rows = await new Promise((resolve, reject) => {
+      db.all("SELECT * FROM holdings", (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+    const chunkSize = 2; // 🔥 small batches to avoid rate limit
+
+  for (let row of rows) {
+  try {
+    let currentPrice = 0;
+
+    if (isMutualFund(row.symbol)) {
+      currentPrice = await getMFNAV(row.symbol);
+    } else {
+      currentPrice = await getNSEPrice(row.symbol);
+    }
+
+    console.log("Updating:", row.symbol, currentPrice);
+
+    await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE holdings SET prevClose = ? WHERE id = ?`,
+        [currentPrice, row.id],
+        (err) => (err ? reject(err) : resolve())
+      );
+    });
+
+    await new Promise((r) => setTimeout(r, 500));
+
+  } catch (e) {
+    console.log("❌ Failed:", row.symbol, e.message);
+  }
+}
+
+    // ✅ ONLY ONE RESPONSE
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("Update error:", err);
+    res.status(500).json(err);
+  }
+});
+
+async function getNSEPrice(symbol) {
+  try {
+    const url = `https://www.nseindia.com/api/quote-equity?symbol=${symbol}`;
+
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+        Referer: "https://www.nseindia.com/",
+      },
+    });
+
+    return response.data?.priceInfo?.lastPrice || 0;
+  } catch (err) {
+    console.log("NSE failed for:", symbol);
+    return 0;
+  }
+}
+
+async function getMFNAV(symbol) {
+  try {
+    const url = "https://api.mfapi.in/mf/search?q=" + encodeURIComponent(symbol);
+    const search = await axios.get(url);
+
+    if (!search.data || search.data.length === 0) return 0;
+
+    const schemeCode = search.data[0].schemeCode;
+
+    const navRes = await axios.get(
+      `https://api.mfapi.in/mf/${schemeCode}`
+    );
+
+    return Number(navRes.data?.data?.[0]?.nav) || 0;
+  } catch (err) {
+    console.log("MF NAV failed:", symbol);
+    return 0;
+  }
+}
+
+function isMutualFund(symbol) {
+  const s = symbol.toLowerCase();
+  return (
+    s.includes("fund") ||
+    s.includes("plan") ||
+    s.includes("etf")
+  );
+}
 /**
  * 🚀 START SERVER
  */
