@@ -1,165 +1,251 @@
-/* Base */
+/* ================= BASE ================= */
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system;
+  font-size: 14px;
+  background: #f6f8fb;
 }
 
-/* Layout */
+/* ================= LAYOUT ================= */
 .app {
   display: flex;
   min-height: 100vh;
   background: #f6f8fb;
 }
 
-/* Dark mode */
 .app.dark {
   background: #0f172a;
   color: #e5e7eb;
 }
 
-/* Sidebar */
+/* ================= SIDEBAR ================= */
 .sidebar {
-  width: 220px;
-  padding: 24px;
+  width: 200px;
+  padding: 18px 16px;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
 }
 
 .app.dark .sidebar {
-  background: #111827;
+  background: #020617;
   border-color: #1f2937;
 }
 
 .sidebar h2 {
-  font-size: 18px;
-  margin-bottom: 24px;
+  font-size: 16px;
+  margin-bottom: 18px;
 }
 
 .sidebar p {
   color: #6b7280;
-  margin: 12px 0;
+  margin: 8px 0;
   cursor: pointer;
+  font-size: 13px;
+  transition: 0.2s;
 }
 
 .sidebar p:hover {
   color: #111827;
+  transform: translateX(3px);
 }
 
-/* Main */
+.app.dark .sidebar p:hover {
+  color: #60a5fa;
+}
+
+/* ================= MAIN ================= */
 .main {
   flex: 1;
-  padding: 32px;
+  padding: 16px 20px;
 }
 
-/* Cards */
+/* ================= CARDS ================= */
 .card {
   background: #ffffff;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
   transition: all 0.2s ease;
 }
 
-.card:hover {
-  transform: translateY(-2px);
-}
-
-/* Dark cards */
 .app.dark .card {
-  background: #1f2937;
+  background: #020617;
+  border-color: #1f2937;
 }
 
-/* Flex layout */
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+}
+
+/* ================= FLEX ================= */
 .flex {
   display: flex;
-  gap: 20px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-/* Titles */
+/* ================= TITLES ================= */
 h1 {
-  font-size: 24px;
-  margin-bottom: 20px;
+  font-size: 20px;
+  margin-bottom: 14px;
 }
 
 h3 {
   font-size: 13px;
-  color: #6b7280;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
-/* Values */
+/* ================= VALUES ================= */
 .card p {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 600;
+  margin: 4px 0;
 }
 
-/* Table */
+/* ================= FIRE GRID ================= */
+.fire-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 18px;
+  margin-top: 10px;
+}
+
+.slider-group {
+  width: 100%;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+  opacity: 0.85;
+}
+
+.label-row span:last-child {
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+/* ================= RANGE SLIDER ================= */
+input[type="range"] {
+  width: 100%;
+  height: 3px;
+  border-radius: 5px;
+  background: #e5e7eb;
+  outline: none;
+  appearance: none;
+}
+
+.app.dark input[type="range"] {
+  background: #1f2937;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+/* ================= TABLE ================= */
 .table {
   width: 100%;
-  margin-top: 25px;
+  margin-top: 16px;
   border-collapse: collapse;
-  border-radius: 16px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .table th {
   text-align: left;
-  padding: 14px;
-  font-size: 12px;
+  padding: 8px;
+  font-size: 11px;
   color: #6b7280;
-  background: #f9fafb;
+  background: #f1f5f9;
+}
+
+.app.dark .table th {
+  background: #020617;
 }
 
 .table td {
-  padding: 16px;
-  border-top: 1px solid #f1f5f9;
-}
-
-/* Dark table */
-.app.dark .table th {
-  background: #111827;
+  padding: 10px 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 13px;
 }
 
 .app.dark .table td {
-  border-color: #374151;
+  border-color: #1f2937;
 }
 
-/* Inputs */
-input, select {
-  padding: 10px;
-  border-radius: 8px;
+.table tr:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+/* ================= INPUTS ================= */
+input,
+select {
+  padding: 8px;
+  border-radius: 6px;
   border: 1px solid #e5e7eb;
-  margin-right: 10px;
+  font-size: 13px;
 }
 
 .app.dark input,
 .app.dark select {
-  background: #111827;
-  border-color: #374151;
+  background: #020617;
+  border-color: #1f2937;
   color: white;
 }
 
-/* Buttons */
+/* ================= BUTTONS ================= */
 button {
   background: #2563eb;
   color: white;
   border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 13px;
+  transition: 0.2s;
 }
 
 button:hover {
   background: #1d4ed8;
+  transform: translateY(-1px);
 }
 
-/* Profit / Loss */
+/* ================= COLORS ================= */
 .green {
-  color: #16a34a;
-  font-weight: 600;
+  color: #22c55e;
 }
 
 .red {
-  color: #dc2626;
-  font-weight: 600;
+  color: #ef4444;
+}
+
+/* ================= RESPONSIVE ================= */
+@media (max-width: 900px) {
+  .fire-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .main {
+    padding: 12px;
+  }
 }

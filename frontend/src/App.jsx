@@ -3,23 +3,21 @@ import {
   getPortfolio,
   addHolding,
   deleteHolding,
-  updateHolding,
-  replacePortfolio,
   updatePrices,
 } from "./api";
-import { PieChart, Pie, Cell, Tooltip } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+} from "recharts";
 import Papa from "papaparse";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#845EC2"];
 
 function App() {
   const [data, setData] = useState([]);
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-
-  const [dark, setDark] = useState(() => {
-    return localStorage.getItem("darkMode") === "true";
-  });
+  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
 
   const [form, setForm] = useState({
     symbol: "",
@@ -28,324 +26,452 @@ function App() {
     sector: "",
   });
 
-  const fetchData = async () => {
-    try {
-      const res = await getPortfolio();
-      setData(res.data);
-    } catch (err) {
-      console.error("Error fetching data:", err);
-    }
-  };
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    quantity: "",
+    avgPrice: "",
+  });
 
-  const handleUpdatePrices = async () => {
-  try {
-    await updatePrices();
-    await fetchData();
-    alert("Prices updated ✅");
-  } catch (err) {
-    console.error(err);
-    alert("Price update failed ❌");
-  }
-};
+  // FIRE
+  const [rate, setRate] = useState(12);
+  const [years, setYears] = useState(10);
+  const [inflation, setInflation] = useState(6);
+  const [fireTarget, setFireTarget] = useState(50000000);
+  const [sip, setSip] = useState(20000);
+
+  const [futureValue, setFutureValue] = useState(0);
+  const [requiredSip, setRequiredSip] = useState(0);
+
+  const fetchData = async () => {
+    const res = await getPortfolio();
+    setData(res.data);
+  };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const handleAdd = async () => {
-    if (!form.symbol || !form.quantity) return;
+  // 🔥 FIRE CALC
+  useEffect(() => {
+    const r = rate / 100;
+    const n = years;
+    const inf = inflation / 100;
 
-    await addHolding(form);
-    setForm({ symbol: "", quantity: "", avgPrice: "", sector: "" });
+    if (!fireTarget || !years) return;
+
+    const inflatedFire = fireTarget * Math.pow(1 + inf, n);
+    const fvCurrent = totalValue * Math.pow(1 + r, n);
+
+    let fvSip = r > 0
+      ? sip * ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
+      : sip * 12 * n;
+
+    const totalFuture = fvCurrent + fvSip;
+    const remaining = Math.max(inflatedFire - totalFuture, 0);
+
+    let sipNeeded = r > 0
+      ? remaining / ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
+      : remaining / (n * 12);
+
+    setFutureValue(Math.round(inflatedFire));
+    setRequiredSip(Math.round(sipNeeded));
+  }, [rate, years, inflation, fireTarget, sip]);
+
+  // ✅ RESET FIX
+  const resetCalculator = () => {
+    setRate(12);
+    setYears(10);
+    setInflation(6);
+    setFireTarget(50000000);
+    setSip(20000);
+  };
+
+  // 🔥 STOCK INSIGHTS
+  const stockHoldings = data.filter(
+    (h) =>
+      !h.symbol.toLowerCase().includes("fund") &&
+      !h.symbol.toLowerCase().includes("plan")
+  );
+
+  const totalStockInvestment = stockHoldings.reduce(
+    (sum, h) => sum + h.quantity * h.avgPrice,
+    0
+  );
+
+  const maxPerStock = totalStockInvestment * 0.1;
+
+  const exceededStocks = stockHoldings.map((h) => {
+    const investment = h.quantity * h.avgPrice;
+    const excess = investment - maxPerStock;
+
+    return {
+      ...h,
+      investment,
+      excess,
+      isExceeded: investment > maxPerStock,
+    };
+  }).filter(h => h.isExceeded);
+
+  // 🔥 ASSET ALLOCATION
+  const allocation = { stocks: 0, mf: 0, etf: 0, sgb: 0 };
+
+  data.forEach((h) => {
+    const investment = h.quantity * h.avgPrice;
+    const symbol = h.symbol.toLowerCase();
+
+    if (symbol.includes("sgb")) allocation.sgb += investment;
+    else if (symbol.endsWith("-e")) allocation.etf += investment;
+    else if (symbol.includes("fund") || symbol.includes("plan")) allocation.mf += investment;
+    else allocation.stocks += investment;
+  });
+
+  const assetData = [
+    { name: "Stocks", value: allocation.stocks },
+    { name: "MF", value: allocation.mf },
+    { name: "ETF", value: allocation.etf },
+    { name: "SGB", value: allocation.sgb },
+  ];
+
+  const handleUpdatePrices = async () => {
+    await updatePrices();
     fetchData();
   };
 
-  // ✅ CSV Upload Handler
   const handleFileUpload = (e) => {
-    console.log("FILE UPLOAD TRIGGERED");
-
     const file = e.target.files[0];
     if (!file) return;
 
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      beforeFirstChunk: function (chunk) {
-        const lines = chunk.split("\n");
-        const headerIndex = lines.findIndex((line) =>
-          line.includes("Symbol")
-        );
-        return lines.slice(headerIndex).join("\n");
-      },
       complete: async function (results) {
-        console.log("Parsed CSV:", results.data);
-
-        const payloads = results.data
-  .map((row) => {
-    const symbol = row["Symbol"]?.trim();
-
-    const quantity =
-      Number(row["Quantity Available"] || row["Qty"] || row["Units"]) || 0;
-
-    const avgPrice =
-      Number(row["Average Price"] || row["Buy avg."] || row["Avg NAV"])|| 0;
-
-    const prevClose = 0;
-
-    // 🔥 detect MF vs stock
-    const isMF =
-      symbol &&
-      (symbol.toLowerCase().includes("fund") ||
-        symbol.toLowerCase().includes("etf") ||
-        symbol.toLowerCase().includes("plan"));
-
-    return {
-      symbol,
-      quantity,
-      avgPrice,
-      prevClose,
-      sector:
-        row["Sector"] ||
-        (isMF ? detectMFCategory(symbol) : row["Sector"]),
-    };
-  })
-  .filter((p) => p.symbol && p.quantity);
-
-        console.log("Uploading:", payloads.length, "stocks");
-
-        try {
-          await Promise.all(payloads.map(p => addHolding(p)));
-          await fetchData();
-          alert("Portfolio synced successfully 🚀");
-        } catch (err) {
-          console.error("Upload failed:", err);
-          alert("Upload failed ❌");
-        }
+        await Promise.all(results.data.map((row) => addHolding(row)));
+        fetchData();
       },
     });
   };
 
-        function detectMFCategory(symbol) {
-  const name = symbol.toLowerCase();
+  const totalValue = data.reduce((s, d) => s + (d.currentValue || 0), 0);
+  const totalInvestment = data.reduce((s, d) => s + (d.investment || 0), 0);
+  const totalPnL = totalValue - totalInvestment;
 
-  const map = [
-    { key: "arbitrage", value: "Arbitrage" },
-    { key: "flexi", value: "Flexi Cap" },
-    { key: "multi", value: "Multi Cap" },
-    { key: "large", value: "Large Cap" },
-    { key: "mid", value: "Mid Cap" },
-    { key: "small", value: "Small Cap" },
-    { key: "index", value: "Index" },
-    { key: "etf", value: "ETF" },
-    { key: "liquid", value: "Liquid" },
-  ];
-
-  for (let m of map) {
-    if (name.includes(m.key)) return m.value;
-  }
-
-  return "Others";
-}
-
-  // 📊 Charts
   const chartData = data.map((d) => ({
     name: d.symbol,
     value: d.currentValue || 0,
   }));
 
-  const sectorDataMap = {};
+  const sectorMap = {};
   data.forEach((d) => {
     if (!d.sector) return;
-    sectorDataMap[d.sector] =
-      (sectorDataMap[d.sector] || 0) + (d.currentValue || 0);
+    sectorMap[d.sector] = (sectorMap[d.sector] || 0) + (d.currentValue || 0);
   });
 
-  const sectorData = Object.keys(sectorDataMap).map((sector) => ({
-    name: sector,
-    value: sectorDataMap[sector],
+  const sectorData = Object.keys(sectorMap).map((s) => ({
+    name: s,
+    value: sectorMap[s],
   }));
-
-  // 📊 Totals
-  const totalValue = data.reduce((sum, d) => sum + (d.currentValue || 0), 0);
-  const totalInvestment = data.reduce((sum, d) => sum + (d.investment || 0), 0);
-  const totalPnL = totalValue - totalInvestment;
-
-  // 🧠 Insights
-  const insights = [];
-  if (totalValue > 0) {
-    Object.entries(sectorDataMap).forEach(([sector, value]) => {
-      const pct = (value / totalValue) * 100;
-      if (pct > 40) {
-        insights.push(`⚠️ High exposure to ${sector} (${pct.toFixed(0)}%)`);
-      }
-    });
-  }
 
   return (
     <div className={dark ? "app dark" : "app"}>
-      {/* Sidebar */}
       <aside className="sidebar">
         <h2>📊 Portfolio AI</h2>
         <p>Dashboard</p>
         <p>Analytics</p>
         <p>Insights</p>
-
-        <button
-          onClick={() => {
-            const newMode = !dark;
-            setDark(newMode);
-            localStorage.setItem("darkMode", newMode);
-          }}
-        >
+        <button onClick={() => setDark(!dark)}>
           {dark ? "☀️ Light" : "🌙 Dark"}
         </button>
       </aside>
 
-      {/* Main */}
       <main className="main">
-        <h1 style={{ fontWeight: 600 }}>Portfolio Overview</h1>
+        <h1>Portfolio Overview</h1>
 
-        {/* Upload */}
-        <div className="card" style={{ marginTop: 10 }}>
+        <div className="card">
           <h3>Import CSV</h3>
+          <input type="file" onChange={handleFileUpload} />
+        </div>
+
+        <div className="card">
+          <button onClick={handleUpdatePrices}>🔄 Update Prices</button>
+        </div>
+
+        {/* SUMMARY */}
+        <div className="flex">
+          <div className="card"><h3>Investment</h3><p>₹{totalInvestment.toLocaleString()}</p></div>
+          <div className="card"><h3>Value</h3><p>₹{totalValue.toLocaleString()}</p></div>
+          <div className="card"><h3>P&L</h3>
+            <p className={totalPnL > 0 ? "green" : "red"}>₹{totalPnL.toLocaleString()}</p>
+          </div>
+        </div>
+
+      {/* 🔥 FIRE (CLEAN UI FINAL) */}
+<div className="card" style={{ marginTop: 20 }}>
+  <h3 style={{ marginBottom: 15 }}>🔥 FIRE Planner</h3>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1.2fr 0.8fr",
+      gap: 20,
+      alignItems: "start",
+    }}
+  >
+
+    {/* LEFT SIDE INPUTS */}
+    <div style={{ display: "grid", gap: 14 }}>
+
+      {[
+        { label: "Return (%)", value: rate, set: setRate, max: 20 },
+        { label: "Years", value: years, set: setYears, max: 40 },
+        { label: "Inflation (%)", value: inflation, set: setInflation, max: 10 },
+        { label: "FIRE Target", value: fireTarget, set: setFireTarget, max: 200000000, step: 500000 },
+        { label: "SIP", value: sip, set: setSip, max: 200000, step: 1000 },
+      ].map((item, i) => (
+        <div key={i}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontSize: 13 }}>{item.label}</span>
+            <input
+              type="number"
+              value={item.value}
+              onChange={(e) => item.set(+e.target.value)}
+              style={{
+                width: 90,
+                padding: "2px 6px",
+                fontSize: 12,
+              }}
+            />
+          </div>
+
           <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => {
-              console.log("INPUT CHANGED");
-              handleFileUpload(e);
-              e.target.value = null;
+            type="range"
+            min="0"
+            max={item.max}
+            step={item.step || 1}
+            value={item.value}
+            onChange={(e) => item.set(+e.target.value)}
+            style={{
+              width: "100%",
+              height: 4,
+              cursor: "pointer",
             }}
           />
         </div>
+      ))}
 
-        <div className="card" style={{ marginTop: 10 }}>
-  <h3>Market Data</h3>
-  <button onClick={handleUpdatePrices}>
-    🔄 Update Prices
-  </button>
-</div> 
+      <button
+        onClick={() => {
+          setRate(0);
+          setYears(0);
+          setInflation(0);
+          setFireTarget(0);
+          setSip(0);
+        }}
+        style={{ width: "fit-content", marginTop: 5 }}
+      >
+        Reset
+      </button>
+    </div>
 
-        {/* Cards */}
-        <div className="flex" style={{ marginTop: 20 }}>
-          <div className="card" style={{ width: 340 }}>
-            <h3>Portfolio Value</h3>
-            <p>₹{totalValue.toLocaleString()}</p>
-          </div>
+    {/* RIGHT SIDE RESULTS */}
+    <div
+      style={{
+        padding: 16,
+        borderRadius: 12,
+        background: "rgba(255,255,255,0.05)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
 
-          <div className="card" style={{ width: 340 }}>
-            <h3>Investment</h3>
-            <p>₹{totalInvestment.toLocaleString()}</p>
-          </div>
-
-          <div className="card" style={{ width: 340 }}>
-            <h3>P&L</h3>
-            <p className={totalPnL > 0 ? "green" : "red"}>
-              ₹{totalPnL.toLocaleString()}
-            </p>
-          </div>
+      {/* MAIN OUTPUT */}
+      <div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>FIRE Target (Inflation)</div>
+        <div style={{ fontSize: 20, fontWeight: "bold" }}>
+          ₹{futureValue.toLocaleString()}
         </div>
+      </div>
 
-        {/* Charts */}
-        <div className="flex" style={{ marginTop: 20, alignItems: "stretch" }}>
-          <div className="card" style={{ width: 340 }}>
-            <h3>Stock Allocation</h3>
-            <PieChart width={300} height={250}>
-              <Pie
-  data={chartData}
-  dataKey="value"
-  outerRadius={100}
-  isAnimationActive={true}
-  animationDuration={800}
->
+      <div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>Required SIP</div>
+        <div style={{ fontSize: 16 }}>
+          ₹{requiredSip.toLocaleString()}
+        </div>
+      </div>
+
+      {/* PROGRESS */}
+      {(() => {
+        const r = rate / 100;
+        const n = years;
+
+        const fvCurrent = totalValue * Math.pow(1 + r, n);
+
+        const fvSip =
+          r > 0
+            ? sip * ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
+            : sip * 12 * n;
+
+        const totalFuture = fvCurrent + fvSip;
+
+        const progress =
+          futureValue > 0
+            ? Math.min((totalFuture / futureValue) * 100, 100)
+            : 0;
+
+        return (
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>
+              Progress
+            </div>
+
+            <div style={{ fontWeight: "bold", marginBottom: 6 }}>
+              {progress.toFixed(1)}%
+            </div>
+
+            <div
+              style={{
+                height: 6,
+                background: "#222",
+                borderRadius: 6,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress}%`,
+                  height: "100%",
+                  background: "#22c55e",
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+
+  </div>
+</div> 
+        
+
+        {/* CHARTS */}
+        <div className="flex">
+          <div className="card">
+            <h3>Allocation</h3>
+            <PieChart width={280} height={280}>
+              <Pie data={chartData} dataKey="value">
                 {chartData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => `₹${v.toFixed(0)}`} />
+              <Tooltip />
             </PieChart>
           </div>
 
-          <div className="card" style={{ width: 340 }}>
-            <h3>Sector Allocation</h3>
-            <PieChart width={300} height={250}>
-              <Pie
-  data={sectorData}
-  dataKey="value"
-  outerRadius={100}
-  isAnimationActive={true}
-  animationDuration={800}
->
+          <div className="card">
+            <h3>Sector</h3>
+            <PieChart width={280} height={280}>
+              <Pie data={sectorData} dataKey="value">
                 {sectorData.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v) => `₹${v.toFixed(0)}`} />
+              <Tooltip />
             </PieChart>
           </div>
 
-          <div className="card" style={{ width: 340 }}>
-            <h3>Insights</h3>
-            {insights.length === 0 ? (
-              <p>✅ Well diversified</p>
-            ) : (
-              insights.map((i, idx) => <p key={idx}>{i}</p>)
-            )}
+          {/* NEW CHART */}
+          <div className="card">
+            <h3>Asset Allocation</h3>
+            <PieChart width={280} height={280}>
+              <Pie data={assetData} dataKey="value">
+                {assetData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(v) => `₹${Math.round(v).toLocaleString()}`} />
+            </PieChart>
           </div>
         </div>
 
-        {/* Form */}
-        <div className="card" style={{ marginTop: 20 }}>
-          <input
-            placeholder="Symbol"
-            value={form.symbol}
-            onChange={(e) =>
-              setForm({ ...form, symbol: e.target.value })
-            }
-          />
-          <input
-            placeholder="Qty"
-            value={form.quantity}
-            onChange={(e) =>
-              setForm({ ...form, quantity: e.target.value })
-            }
-          />
-          <input
-            placeholder="Avg Price"
-            value={form.avgPrice}
-            onChange={(e) =>
-              setForm({ ...form, avgPrice: e.target.value })
-            }
-          />
+        {/* INSIGHTS */}
+        <div className="card">
+          <h3>Insights</h3>
+          <p>📦 Diversification: {stockHoldings.length} stocks</p>
+          <p>⚖️ Max per stock: ₹{Math.round(maxPerStock).toLocaleString()}</p>
 
-          <select
-            value={form.sector}
-            onChange={(e) =>
-              setForm({ ...form, sector: e.target.value })
-            }
-          >
-            <option value="">Select Sector</option>
-            <option value="Financials">Financials</option>
-            <option value="IT">IT</option>
-            <option value="Energy">Energy</option>
-            <option value="FMCG">FMCG</option>
-            <option value="Pharma">Pharma</option>
-            <option value="Auto">Auto</option>
-            <option value="Others">Others</option>
-          </select>
-
-          <button onClick={handleAdd}>Add</button>
+          {exceededStocks.length > 0 ? (
+            exceededStocks.map((s) => (
+              <p key={s.symbol} style={{ color: "#ff6b6b" }}>
+                ⚠️ {s.symbol} exceeds by ₹{Math.round(s.excess).toLocaleString()}
+              </p>
+            ))
+          ) : (
+            <p style={{ color: "#22c55e" }}>
+              ✅ All stocks within limits
+            </p>
+          )}
         </div>
 
-        {/* Table */}
+        {/* ➕ Add Holding */}
+<div className="card" style={{ marginTop: 20 }}>
+  <h3>Add Holding</h3>
+
+  <div className="flex">
+    <input
+      placeholder="Symbol"
+      value={form.symbol}
+      onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+    />
+
+    <input
+      placeholder="Quantity"
+      type="number"
+      value={form.quantity}
+      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+    />
+
+    <input
+      placeholder="Avg Price"
+      type="number"
+      value={form.avgPrice}
+      onChange={(e) => setForm({ ...form, avgPrice: e.target.value })}
+    />
+
+    <input
+      placeholder="Sector"
+      value={form.sector}
+      onChange={(e) => setForm({ ...form, sector: e.target.value })}
+    />
+
+    <button
+      onClick={async () => {
+        if (!form.symbol || !form.quantity || !form.avgPrice) return;
+
+        await addHolding({
+          symbol: form.symbol.trim(),
+          quantity: Number(form.quantity),
+          avgPrice: Number(form.avgPrice),
+          sector: form.sector || "Others",
+        });
+
+        setForm({ symbol: "", quantity: "", avgPrice: "", sector: "" });
+        fetchData();
+      }}
+    >
+      ➕ Add
+    </button>
+  </div>
+</div>
+
+        {/* TABLE */}
         <table className="table">
           <thead>
             <tr>
               <th>Stock</th>
               <th>Sector</th>
-              <th>Quantity</th>
-              <th>Average Price</th>
-              <th>Current Price</th>
+              <th>Qty</th>
+              <th>Avg</th>
+              <th>Price</th>
               <th>Value</th>
               <th>P&L</th>
               <th>%</th>
@@ -353,99 +479,102 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
-              <tr>
-                <td colSpan="10">No data</td>
-              </tr>
-            ) : (
-              data.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.symbol}</td>
-                  <td>{d.sector}</td>
+  {data.map((d) => {
+    const isEditing = editingId === d.id;
 
-                  <td>
-                    {editingId === d.id ? (
-                      <input
-                        value={editForm.quantity}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            quantity: e.target.value,
-                          })
-                        }
-                      />
-                    ) : (
-                      d.quantity
-                    )}
-                  </td>
+    return (
+      <tr key={d.id}>
+        <td>{d.symbol}</td>
+        <td>{d.sector}</td>
 
-                  <td>
-                    {editingId === d.id ? (
-                      <input
-                        value={editForm.avgPrice}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            avgPrice: e.target.value,
-                          })
-                        }
-                      />
-                    ) : (
-                      d.avgPrice
-                    )}
-                  </td>
+        <td>
+          {isEditing ? (
+            <input
+              type="number"
+              value={editForm.quantity}
+              onChange={(e) =>
+                setEditForm({ ...editForm, quantity: e.target.value })
+              }
+            />
+          ) : (
+            d.quantity
+          )}
+        </td>
 
-                  <td>{d.currentPrice?.toFixed(2)}</td>
-                  <td>{d.currentValue?.toFixed(0)}</td>
+        <td>
+          {isEditing ? (
+            <input
+              type="number"
+              value={editForm.avgPrice}
+              onChange={(e) =>
+                setEditForm({ ...editForm, avgPrice: e.target.value })
+              }
+            />
+          ) : (
+            d.avgPrice
+          )}
+        </td>
 
-                  <td className={d.pnl > 0 ? "green" : "red"}>
-                    {d.pnl?.toFixed(0)}
-                  </td>
+        <td>{d.currentPrice?.toFixed(2)}</td>
+        <td>{d.currentValue?.toFixed(0)}</td>
+        <td className={d.pnl > 0 ? "green" : "red"}>
+          {d.pnl?.toFixed(0)}
+        </td>
+        <td>{d.pnlPct}%</td>
 
-                  <td>{d.pnlPct}%</td>
+        <td>
+          {isEditing ? (
+            <>
+              <button
+                onClick={async () => {
+                  await fetch(`http://localhost:5000/portfolio/${d.id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      quantity: Number(editForm.quantity),
+                      avgPrice: Number(editForm.avgPrice),
+                    }),
+                  });
 
-                  <td>
-                    {editingId === d.id ? (
-                      <>
-                        <button
-                          onClick={async () => {
-                            await updateHolding(d.id, editForm);
-                            setEditingId(null);
-                            fetchData();
-                          }}
-                        >
-                          💾
-                        </button>
-                        <button onClick={() => setEditingId(null)}>❌</button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            setEditingId(d.id);
-                            setEditForm({
-                              quantity: d.quantity,
-                              avgPrice: d.avgPrice,
-                            });
-                          }}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() =>
-                            deleteHolding(d.id).then(fetchData)
-                          }
-                        >
-                          ❌
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
+                  setEditingId(null);
+                  fetchData();
+                }}
+              >
+                ✅
+              </button>
+
+              <button onClick={() => setEditingId(null)}>❌</button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setEditingId(d.id);
+                  setEditForm({
+                    quantity: d.quantity,
+                    avgPrice: d.avgPrice,
+                  });
+                }}
+              >
+                ✏️
+              </button>
+
+              <button
+                onClick={() =>
+                  deleteHolding(d.id).then(fetchData)
+                }
+              >
+                🗑
+              </button>
+            </>
+          )}
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
         </table>
+
       </main>
     </div>
   );
