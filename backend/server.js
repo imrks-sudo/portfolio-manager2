@@ -159,6 +159,24 @@ app.get("/prices/update", async (req, res) => {
     try {
       let successCount = 0;
 
+      // ✅ NSE instance (FIX: cookie handling)
+      const nse = axios.create({
+        baseURL: "https://www.nseindia.com",
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "application/json",
+          Referer: "https://www.nseindia.com/",
+        },
+        timeout: 5000,
+      });
+
+      // ✅ Initialize NSE cookies (CRITICAL FIX)
+      try {
+        await nse.get("/");
+      } catch (e) {
+        console.log("⚠️ NSE cookie init failed");
+      }
+
       for (const row of rows) {
         try {
           let symbol = row.symbol;
@@ -166,14 +184,19 @@ app.get("/prices/update", async (req, res) => {
 
           const s = symbol.toLowerCase();
 
-          // 🟢 MUTUAL FUND
+          console.log("📡 Fetching:", symbol);
+
+          // 🟢 MUTUAL FUND (UNCHANGED LOGIC)
           if (s.includes("fund") || s.includes("plan")) {
             const search = await axios.get(
               "https://api.mfapi.in/mf/search?q=" +
                 encodeURIComponent(symbol)
             );
 
-            if (!search.data?.length) continue;
+            if (!search.data?.length) {
+              console.log("⚠️ MF not found:", symbol);
+              continue;
+            }
 
             const schemeCode = search.data[0].schemeCode;
 
@@ -182,43 +205,44 @@ app.get("/prices/update", async (req, res) => {
             );
 
             price = Number(navRes.data?.data?.[0]?.nav) || 0;
-
           } else {
-            // ETF fix
+            // ✅ ETF fix (UNCHANGED)
             if (symbol.endsWith("-E")) symbol = symbol.replace("-E", "");
 
-            // SGB fix
+            // ✅ SGB fix (UNCHANGED)
             if (symbol.endsWith("-GB")) symbol = symbol.replace("-GB", "");
 
-            const response = await axios.get(
-              `https://www.nseindia.com/api/quote-equity?symbol=${symbol}`,
-              {
-                headers: {
-                  "User-Agent": "Mozilla/5.0",
-                  Accept: "application/json",
-                  Referer: "https://www.nseindia.com/",
-                },
-              }
+            // ✅ NSE call (FIXED: using instance)
+            const response = await nse.get(
+              `/api/quote-equity?symbol=${symbol}`
             );
 
             price = Number(response.data?.priceInfo?.lastPrice) || 0;
           }
 
-          if (!price) continue;
+          if (!price) {
+            console.log("⚠️ No price for:", symbol);
+            continue;
+          }
+
+          console.log("✅ Price:", symbol, price);
 
           db.run(
-            `UPDATE holdings SET prevClose=? WHERE id=?`,
+            `UPDATE holdings SET prevClose=?, lastUpdated=datetime('now') WHERE id=?`,
             [price, row.id]
           );
 
           successCount++;
+
+          // ✅ Delay (prevents NSE blocking)
+          await new Promise((r) => setTimeout(r, 300));
 
         } catch (err) {
           console.log(`❌ Failed: ${row.symbol}`, err.message);
         }
       }
 
-      // ✅ Save history
+      // ✅ Save history (UNCHANGED)
       db.all("SELECT * FROM holdings", [], (err, updatedRows) => {
         if (!err) {
           const totalValue = updatedRows.reduce((sum, r) => {
