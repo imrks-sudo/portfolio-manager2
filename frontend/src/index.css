@@ -61,12 +61,10 @@ body {
 
 /* ================= CARDS ================= */
 .card {
-  background: #ffffff;
-  padding: 12px 14px;
-  border-radius: 10px;
-  margin-top: 12px;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
+  background: #0b1220;   /* solid dark */
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #1f2937;
 }
 
 .app.dark .card {

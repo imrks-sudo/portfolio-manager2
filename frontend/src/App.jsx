@@ -4,21 +4,95 @@ import {
   addHolding,
   deleteHolding,
   updatePrices,
+  replacePortfolio,
 } from "./api";
+
 import {
   PieChart,
   Pie,
   Cell,
   Tooltip,
 } from "recharts";
+
 import Papa from "papaparse";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#845EC2"];
+
+const format2 = (v) =>
+  Number(v).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  
+
+const formatPercent = (value, total) =>
+  total ? ((value / total) * 100).toFixed(2) : "0.00";
 
 function App() {
   const [data, setData] = useState([]);
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
   const [view, setView] = useState("dashboard");
+
+  const [previewData, setPreviewData] = useState([]);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const handleConfirmUpload = async () => {
+  try {
+    await replacePortfolio(previewData);
+    await fetchData();
+
+    setShowPreview(false);
+    setPreviewData([]);
+
+    alert(`✅ Portfolio updated (${previewData.length} items)`);
+  } catch (err) {
+    console.error(err);
+    alert("❌ Upload failed");
+  }
+};
+
+const getDiffData = () => {
+  const currentMap = new Map(
+    data.map((d) => [d.symbol, d])
+  );
+
+  const previewMap = new Map(
+    previewData.map((d) => [d.symbol, d])
+  );
+
+  const diff = [];
+
+  // NEW + UPDATED + SAME
+  previewData.forEach((p) => {
+    const existing = currentMap.get(p.symbol);
+
+    if (!existing) {
+      diff.push({ ...p, type: "NEW" });
+    } else if (
+      existing.quantity !== p.quantity ||
+      existing.avgPrice !== p.avgPrice
+    ) {
+      diff.push({ ...p, type: "UPDATED" });
+    } else {
+      diff.push({ ...p, type: "SAME" });
+    }
+  });
+
+  // REMOVED
+  data.forEach((d) => {
+    if (!previewMap.has(d.symbol)) {
+      diff.push({
+        symbol: d.symbol,
+        quantity: d.quantity,
+        avgPrice: d.avgPrice,
+        sector: d.sector,
+        type: "REMOVED",
+      });
+    }
+  });
+
+  return diff;
+};
 
   const [form, setForm] = useState({
     symbol: "",
@@ -26,6 +100,47 @@ function App() {
     avgPrice: "",
     sector: "",
   });
+
+  const renderCustomLegend = (data) => {
+  const total = data.reduce((s, d) => s + d.value, 0);
+
+  return (
+    <div style={{ fontSize: 12 }}>
+      {data.map((entry, index) => {
+        const pct = formatPercent(entry.value, total);
+
+        return (
+          <div
+            key={index}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 4,
+            }}
+          >
+            <span>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 10,
+                  height: 10,
+                  background: COLORS[index % COLORS.length],
+                  marginRight: 6,
+                }}
+              />
+              {entry.name}
+            </span>
+
+            <span>
+              ₹{format2(entry.value)} • {pct}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -40,6 +155,14 @@ function App() {
   const [fireTarget, setFireTarget] = useState(50000000);
   const [sip, setSip] = useState(20000);
 
+  const resetCalculator = () => {
+  setRate(0);
+  setYears(0);
+  setInflation(0);
+  setFireTarget(0);
+  setSip(0);
+};
+
   const [futureValue, setFutureValue] = useState(0);
   const [requiredSip, setRequiredSip] = useState(0);
 
@@ -49,12 +172,39 @@ function App() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+  fetchData();
+}, []);
 
   const totalValue = data.reduce((s, d) => s + (d.currentValue || 0), 0);
   const totalInvestment = data.reduce((s, d) => s + (d.investment || 0), 0);
   const totalPnL = totalValue - totalInvestment;
+
+  const assetTotals = {
+  stocks: 0,
+  mf: 0,
+  etf: 0,
+  sgb: 0,
+};
+
+const totalPnLPct =
+  totalInvestment > 0
+    ? ((totalPnL / totalInvestment) * 100)
+    : 0;
+
+data.forEach((d) => {
+  const value = d.currentValue || 0;
+  const symbol = (d.symbol || "").toLowerCase();
+
+  if (symbol.includes("fund") || symbol.includes("plan")) {
+    assetTotals.mf += value;
+  } else if (symbol.includes("etf") || symbol.endsWith("-e")) {
+    assetTotals.etf += value;
+  } else if (symbol.includes("sgb") || symbol.endsWith("-gb")) {
+    assetTotals.sgb += value;
+  } else {
+    assetTotals.stocks += value;
+  }
+});
 
   // FIRE CALC
   useEffect(() => {
@@ -62,7 +212,11 @@ function App() {
     const n = years;
     const inf = inflation / 100;
 
-    if (!fireTarget || !years) return;
+    if (years <= 0) {
+  setFutureValue(0);
+  setRequiredSip(0);
+  return;
+}
 
     const inflatedFire = fireTarget * Math.pow(1 + inf, n);
     const fvCurrent = totalValue * Math.pow(1 + r, n);
@@ -85,24 +239,169 @@ function App() {
     setRequiredSip(Math.round(sipNeeded));
   }, [rate, years, inflation, fireTarget, sip, totalValue]);
 
+  const progress =
+  futureValue > 0
+    ? Math.min((totalValue / futureValue) * 100, 100)
+    : 0;
+
   const handleUpdatePrices = async () => {
     await updatePrices();
     fetchData();
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const normalize = (str) =>
+  (str || "").toLowerCase().replace(/\s+/g, "").trim();
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async function (results) {
-        await Promise.all(results.data.map((row) => addHolding(row)));
-        fetchData();
-      },
-    });
+const findHeaderRow = (rows) => {
+  for (let i = 0; i < rows.length; i++) {
+    const values = Object.values(rows[i]).map(normalize);
+
+    if (
+      values.includes("symbol") ||
+      values.includes("tradingsymbol") ||
+      values.includes("instrument")
+    ) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+const mapRow = (row, headers) => {
+  const get = (keys) => {
+    for (let k of keys) {
+      const found = headers.find((h) =>
+        normalize(h).includes(normalize(k))
+      );
+      if (found && row[found] != null) return row[found];
+    }
+    return null;
   };
+
+  const symbol = get(["symbol", "trading symbol", "instrument"]);
+  const qty = get(["quantity", "qty", "quantity available"]);
+  const avg = get(["average price", "avg price", "cost price"]);
+  const sector = get(["sector"]);
+
+  if (!symbol) return null;
+
+  return {
+    symbol: String(symbol).trim(),
+    quantity: Number(String(qty || "0").replace(/,/g, "")) || 0,
+    avgPrice: Number(String(avg || "0").replace(/,/g, "")) || 0,
+    sector: String(sector || "").trim(),
+  };
+};
+
+const handleFileUpload = (e) => {
+  console.log("📂 File upload triggered");
+
+  const file = e.target.files?.[0];
+  if (!file) {
+    alert("❌ No file selected");
+    return;
+  }
+
+  Papa.parse(file, {
+    header: false, // 🔥 IMPORTANT CHANGE
+    skipEmptyLines: true,
+
+    complete: async function (results) {
+      try {
+        const rows = results.data;
+
+        console.log("Raw rows:", rows.slice(0, 10));
+
+        // 🔍 FIND HEADER ROW
+        let headerIndex = -1;
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i].map((c) =>
+            (c || "").toString().toLowerCase()
+          );
+
+          if (
+            row.some((c) =>
+              c.includes("symbol") ||
+              c.includes("trading") ||
+              c.includes("instrument")
+            )
+          ) {
+            headerIndex = i;
+            break;
+          }
+        }
+
+        if (headerIndex === -1) {
+          alert("❌ Could not detect header row");
+          return;
+        }
+
+        const headers = rows[headerIndex];
+
+        console.log("Detected headers:", headers);
+
+        // 🔧 NORMALIZE
+        const normalize = (str) =>
+          (str || "").toLowerCase().replace(/[^a-z]/g, "");
+
+        // 🔄 MAP ROWS
+        const cleaned = rows
+          .slice(headerIndex + 1)
+          .map((row) => {
+            const obj = {};
+
+            headers.forEach((h, i) => {
+              obj[h] = row[i];
+            });
+
+            const keys = Object.keys(obj);
+
+            const get = (possible) => {
+              for (let p of possible) {
+                const found = keys.find((k) =>
+                  normalize(k).includes(normalize(p))
+                );
+                if (found && obj[found]) return obj[found];
+              }
+              return null;
+            };
+
+            const symbol = get(["symbol", "tradingsymbol", "instrument"]);
+            const qty = get(["qty", "quantity"]);
+            const avg = get(["avgcost", "averageprice", "cost"]);
+            const sector = get(["sector"]);
+
+            if (!symbol) return null;
+
+            return {
+              symbol: String(symbol).trim(),
+              quantity:
+                Number(String(qty || "0").replace(/,/g, "")) || 0,
+              avgPrice:
+                Number(String(avg || "0").replace(/,/g, "")) || 0,
+              sector: String(sector || "").trim(),
+            };
+          })
+          .filter((x) => x && x.symbol);
+
+        console.log("✅ Cleaned:", cleaned);
+
+        if (!cleaned.length) {
+          alert("⚠️ No valid holdings found in file");
+          return;
+        }
+
+        setPreviewData(cleaned);
+setShowPreview(true);
+
+      } catch (err) {
+        console.error("❌ Upload failed:", err);
+        alert("❌ Upload failed. Check console.");
+      }
+    },
+  });
+};
 
   const chartData = data.map((d) => ({
     name: d.symbol,
@@ -168,10 +467,18 @@ function App() {
     { name: "SGB", value: allocation.sgb },
   ];
 
+const diffData = getDiffData();
+
+const summary = {
+  new: diffData.filter(d => d.type === "NEW").length,
+  updated: diffData.filter(d => d.type === "UPDATED").length,
+  removed: diffData.filter(d => d.type === "REMOVED").length,
+};
+
   return (
     <div className={dark ? "app dark" : "app"}>
       <aside className="sidebar">
-        <h2>📊 Portfolio AI</h2>
+        <h2>Portfolio AI</h2>
 
         <p onClick={() => setView("dashboard")}>🏠 Dashboard</p>
         <p onClick={() => setView("analytics")}>📊 Analytics</p>
@@ -186,34 +493,178 @@ function App() {
 
         {/* DASHBOARD */}
         {view === "dashboard" && (
-          <>
-            <h1>Portfolio Overview</h1>
+  <>
+    <h1 style={{ marginBottom: 16 }}>Portfolio Overview</h1>
 
-            <div className="card">
-              <h3>Import CSV</h3>
-              <input type="file" onChange={handleFileUpload} />
-            </div>
+    {/* 🔷 TOP BAR */}
+    <div className="card" style={{ marginBottom: 20, padding: 16 }}>
 
-            <div className="card">
-              <button onClick={handleUpdatePrices}>🔄 Update Prices</button>
-            </div>
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 12
+      }}>
 
-            <div className="flex">
-              <div className="card">
-                <h3>Investment</h3>
-                <p>₹{totalInvestment.toLocaleString()}</p>
-              </div>
-              <div className="card">
-                <h3>Value</h3>
-                <p>₹{totalValue.toLocaleString()}</p>
-              </div>
-              <div className="card">
-                <h3>P&L</h3>
-                <p className={totalPnL > 0 ? "green" : "red"}>
-                  ₹{totalPnL.toLocaleString()}
-                </p>
-              </div>
-            </div>
+        {/* CSV UPLOAD */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          background: "#020617",
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "1px solid #1f2937"
+        }}>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>
+            Import CSV
+          </span>
+
+          <input type="file" onChange={handleFileUpload} />
+        </div>
+
+        {/* UPDATE BUTTON */}
+        <button
+          onClick={handleUpdatePrices}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            background: "#3b82f6",
+            border: "none",
+            color: "#fff",
+            fontSize: 13,
+            cursor: "pointer"
+          }}
+        >
+          🔄 Update Prices
+        </button>
+
+      </div>
+    </div>
+
+    {/* 🔶 PREVIEW PANEL */}
+    {showPreview && (
+      <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+        <h3 style={{ marginBottom: 10 }}>
+          📄 Preview Upload ({previewData.length} items)
+        </h3>
+
+        {/* SUMMARY */}
+        <div style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 12,
+          fontSize: 13
+        }}>
+          <span style={{ color: "#22c55e" }}>🟢 New: {summary.new}</span>
+          <span style={{ color: "#3b82f6" }}>🔵 Updated: {summary.updated}</span>
+          <span style={{ color: "#ef4444" }}>🔴 Removed: {summary.removed}</span>
+        </div>
+
+        {/* TABLE */}
+        <div style={{ maxHeight: 350, overflowY: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Symbol</th>
+                <th>Qty</th>
+                <th>Avg Price</th>
+                <th>Sector</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {diffData.map((row, i) => (
+                <tr key={i}>
+                  <td>
+                    {row.type === "NEW" && "🟢 New"}
+                    {row.type === "UPDATED" && "🔵 Updated"}
+                    {row.type === "SAME" && "⚪ Same"}
+                    {row.type === "REMOVED" && "🔴 Removed"}
+                  </td>
+                  <td>{row.symbol}</td>
+                  <td>{row.quantity}</td>
+                  <td>{row.avgPrice}</td>
+                  <td>{row.sector || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ACTION BUTTONS */}
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 10,
+          marginTop: 12
+        }}>
+          <button
+            onClick={() => {
+              setShowPreview(false);
+              setPreviewData([]);
+            }}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: "#111827",
+              border: "1px solid #374151",
+              color: "#9ca3af"
+            }}
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={handleConfirmUpload}
+            style={{
+              padding: "6px 12px",
+              borderRadius: 6,
+              background: "#22c55e",
+              border: "none",
+              color: "#fff"
+            }}
+          >
+            Confirm Upload
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* 🔷 KPI CARDS */}
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+      gap: 14,
+      marginBottom: 20
+    }}>
+      <div className="card">
+        <h3>Investment</h3>
+        <p>₹{totalInvestment.toLocaleString()}</p>
+      </div>
+
+      <div className="card">
+        <h3>Value</h3>
+        <p>₹{totalValue.toLocaleString()}</p>
+      </div>
+
+      <div className="card">
+        <h3>P&L</h3>
+        <p className={totalPnL > 0 ? "green" : "red"}>
+          ₹{totalPnL.toLocaleString()}
+        </p>
+      </div>
+
+      <div className="card">
+        <h3>P&L (%)</h3>
+        <p className={totalPnLPct > 0 ? "green" : "red"}>
+          {totalPnLPct.toFixed(2)}%
+        </p>
+      </div>
+    </div>
 
             {/* ADD HOLDING */}
             <div className="card" style={{ marginTop: 20 }}>
@@ -315,159 +766,346 @@ function App() {
         )}
 
         {/* ANALYTICS */}
-        {view === "analytics" && (
-          <div className="flex">
-            <div className="card">
-              <h3>Allocation</h3>
-              <PieChart width={280} height={280}>
-                <Pie data={chartData} dataKey="value">
-                  {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </div>
 
-            <div className="card">
-              <h3>Sector</h3>
-              <PieChart width={280} height={280}>
-                <Pie data={sectorData} dataKey="value">
-                  {sectorData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </div>
+{view === "analytics" && (
+  <div
+    style={{
+      display: "flex",
+      gap: 20,
+      flexWrap: "wrap"
+    }}
+  >
 
-            <div className="card">
-              <h3>Asset Allocation</h3>
-              <PieChart width={280} height={280}>
-                <Pie data={assetData} dataKey="value">
-                  {assetData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </div>
-          </div>
-        )}
+    {/* Sector */}
+    <div className="card" style={{ flex: 1, minWidth: 420 }}>
+      <h3>Sector</h3>
 
-        {/* INSIGHTS */}
-       {/* INSIGHTS */}
-{view === "insights" && (
-  <>
-    {/* 🔥 FIRE PLANNER */}
-    <div className="card">
-      <h3>🔥 FIRE Planner</h3>
+      <PieChart width={340} height={300}>
 
-      <div style={{ display: "grid", gap: "12px", maxWidth: "500px" }}>
-        
-        <label>
-          Return (%): {rate}
-          <input
-            type="range"
-            min="0"
-            max="20"
-            value={rate}
-            onChange={(e) => setRate(+e.target.value)}
-          />
-        </label>
-
-        <label>
-          Years: {years}
-          <input
-            type="range"
-            min="0"
-            max="40"
-            value={years}
-            onChange={(e) => setYears(+e.target.value)}
-          />
-        </label>
-
-        <label>
-          Inflation (%): {inflation}
-          <input
-            type="range"
-            min="0"
-            max="10"
-            value={inflation}
-            onChange={(e) => setInflation(+e.target.value)}
-          />
-        </label>
-
-        <label>
-          FIRE Target: ₹{fireTarget.toLocaleString()}
-          <input
-            type="range"
-            min="0"
-            max="200000000"
-            step="500000"
-            value={fireTarget}
-            onChange={(e) => setFireTarget(+e.target.value)}
-          />
-        </label>
-
-        <label>
-          SIP: ₹{sip.toLocaleString()}
-          <input
-            type="range"
-            min="0"
-            max="200000"
-            step="1000"
-            value={sip}
-            onChange={(e) => setSip(+e.target.value)}
-          />
-        </label>
-
-        <button
-          onClick={() => {
-            setRate(0);
-            setYears(0);
-            setInflation(0);
-            setFireTarget(0);
-            setSip(0);
-          }}
+        <Pie
+          data={sectorData}
+          dataKey="value"
+          innerRadius={80}
+          outerRadius={120}
         >
-          Reset
-        </button>
-      </div>
+          {sectorData.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Pie>
 
-      <hr />
+        {/* ✅ CENTER TEXT (CORRECT PLACE) */}
+        <text
+          x="50%"
+          y="45%"
+          textAnchor="middle"
+          style={{ fill: "#9ca3af", fontSize: 11 }}
+        >
+          Total
+        </text>
 
-      <p>🎯 FIRE (Inflation Adj): ₹{futureValue.toLocaleString()}</p>
-      <p>💸 SIP Needed: ₹{requiredSip.toLocaleString()}</p>
+        <text
+          x="50%"
+          y="55%"
+          textAnchor="middle"
+          style={{ fill: "#fff", fontSize: 16, fontWeight: 600 }}
+        >
+          ₹{format2(totalValue)}
+        </text>
 
-      {/* ✅ Progress using portfolio value */}
-      <p>
-        📊 Progress:{" "}
-        {futureValue > 0
-          ? ((totalValue / futureValue) * 100).toFixed(1)
-          : 0}
-        %
-      </p>
+        {/* Tooltip */}
+        <Tooltip
+          formatter={(value, name, props) => [
+            `₹${format2(value)}`,
+            props.payload.name
+          ]}
+        />
+      </PieChart>
+
+      {renderCustomLegend(sectorData)}
     </div>
 
+    {/* Asset */}
+    <div className="card" style={{ flex: 1, minWidth: 420 }}>
+      <h3>Asset Allocation</h3>
+
+      <PieChart width={340} height={300}>
+
+        <Pie
+          data={assetData}
+          dataKey="value"
+          innerRadius={80}
+          outerRadius={120}
+        >
+          {assetData.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
+        </Pie>
+
+        {/* ✅ CENTER TEXT (CORRECT TOTAL) */}
+        <text
+          x="50%"
+          y="45%"
+          textAnchor="middle"
+          style={{ fill: "#9ca3af", fontSize: 11 }}
+        >
+          Total
+        </text>
+
+        <text
+          x="50%"
+          y="55%"
+          textAnchor="middle"
+          style={{ fill: "#fff", fontSize: 16, fontWeight: 600 }}
+        >
+          ₹{format2(
+            assetData.reduce((s, d) => s + d.value, 0)
+          )}
+        </text>
+
+        {/* Tooltip */}
+        <Tooltip
+          formatter={(value, name, props) => [
+            `₹${format2(value)}`,
+            props.payload.name
+          ]}
+        />
+      </PieChart>
+
+      <div style={{ marginTop: 10 }}>
+        {renderCustomLegend(assetData)}
+      </div>
+    </div>
+
+  </div>
+)}
+
+
+       {/* INSIGHTS */}
+{view === "insights" && (
+  <div className="card" style={{ marginBottom: 20, padding: 20 }}>
+
+    <h3 style={{ marginBottom: 16 }}>🔥 FIRE Planner</h3>
+
+    {/* 🔹 LEFT + RIGHT WRAPPER */}
+    <div style={{
+      display: "flex",
+      gap: 20,
+      flexWrap: "wrap"
+    }}>
+
+      {/* 🔹 LEFT → INPUTS */}
+      <div style={{
+        flex: 1,
+        minWidth: 320,
+        maxWidth: 420,
+        background: "#020617",
+        padding: 16,
+        borderRadius: 12,
+        border: "1px solid #1f2937"
+      }}>
+
+        {[
+          { label: "Return (%)", value: rate, set: setRate, min: 0, max: 20 },
+          { label: "Years", value: years, set: setYears, min: 0, max: 40 },
+          { label: "Inflation (%)", value: inflation, set: setInflation, min: 0, max: 10 },
+          { label: "FIRE Target", value: fireTarget, set: setFireTarget, min: 0, max: 200000000 },
+          { label: "Monthly SIP", value: sip, set: setSip, min: 0, max: 200000 },
+        ].map((item) => (
+          <div key={item.label} style={{ marginBottom: 18 }}>
+
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 6
+            }}>
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>
+                {item.label}
+              </span>
+
+              <input
+                type="number"
+                value={item.value}
+                onChange={(e) => item.set(Number(e.target.value) || 0)}
+                style={{
+                  width: 100,
+                  background: "#020617",
+                  border: "1px solid #374151",
+                  borderRadius: 6,
+                  padding: "4px 6px",
+                  color: "#e5e7eb",
+                  fontSize: 12,
+                  textAlign: "right"
+                }}
+              />
+            </div>
+
+            <div style={{ maxWidth: 300 }}>
+              <input
+                type="range"
+                min={item.min}
+                max={item.max}
+                value={item.value}
+                onChange={(e) => item.set(+e.target.value)}
+                style={{
+                  width: "100%",
+                  height: 3,
+                  accentColor: "#3b82f6"
+                }}
+              />
+            </div>
+
+          </div>
+        ))}
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={resetCalculator}
+            style={{
+              padding: "5px 10px",
+              fontSize: 11,
+              borderRadius: 6,
+              background: "#111827",
+              border: "1px solid #374151",
+              color: "#9ca3af"
+            }}
+          >
+            Reset
+          </button>
+        </div>
+
+      </div>
+
+      {/* 🔹 RIGHT → OUTPUT */}
+      <div style={{
+        flex: 1,
+        minWidth: 320,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14
+      }}>
+
+        <div style={{
+          background: "linear-gradient(135deg, #1e3a8a, #020617)",
+          padding: 18,
+          borderRadius: 12,
+          border: "1px solid #1f2937"
+        }}>
+          <p style={{ fontSize: 12, color: "#93c5fd" }}>🎯 FIRE Target</p>
+          <h2>₹{futureValue.toLocaleString()}</h2>
+        </div>
+
+        <div style={{
+          background: "linear-gradient(135deg, #065f46, #020617)",
+          padding: 18,
+          borderRadius: 12,
+          border: "1px solid #1f2937"
+        }}>
+          <p style={{ fontSize: 12, color: "#6ee7b7" }}>💸 Monthly SIP Needed</p>
+          <h2>₹{requiredSip.toLocaleString()}</h2>
+        </div>
+
+        <div style={{
+          background: "#020617",
+          padding: 18,
+          borderRadius: 12,
+          border: "1px solid #1f2937"
+        }}>
+          <p style={{ fontSize: 12, color: "#9ca3af" }}>📈 Progress</p>
+
+          <h2>{progress.toFixed(1)}%</h2>
+
+          <div style={{
+            height: 6,
+            background: "#1f2937",
+            borderRadius: 6,
+            marginTop: 10,
+            overflow: "hidden"
+          }}>
+            <div style={{
+              width: `${progress}%`,
+              background: "#22c55e",
+              height: "100%",
+              borderRadius: 6,
+              transition: "width 0.4s ease"
+            }} />
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
+
     {/* 💡 INSIGHTS */}
-    <div className="card">
-      <h3>💡 Insights</h3>
+{view === "insights" && (
+  <>
+    <div className="card" style={{ marginTop: 20 }}>
+      <h3 style={{ marginBottom: 16 }}>💡 Insights</h3>
 
-      {/* 10% Rule */}
-      <h4>⚠️ 10% Rule Violations</h4>
-      {exceededStocks.length === 0 ? (
-        <p>✅ All stocks within 10% allocation</p>
-      ) : (
-        exceededStocks.map((s) => (
-          <p key={s.id} style={{ color: "orange" }}>
-            {s.symbol} exceeds by ₹{Math.round(s.excess).toLocaleString()}
-          </p>
-        ))
-      )}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: 16,
+        marginBottom: 20
+      }}>
+        <div style={{
+          padding: 16,
+          borderRadius: 12,
+          background: "#111827",
+          border: "1px solid #1f2937"
+        }}>
+          <p style={{ fontSize: 12, color: "#9ca3af" }}>10% Rule</p>
+          <h4 style={{ color: "#22c55e" }}>✅ Within Limit</h4>
+        </div>
+      </div>
 
-      <hr />
+      <div style={{
+        padding: 16,
+        borderRadius: 12,
+        background: "#111827",
+        border: "1px solid #1f2937"
+      }}>
+        <h4 style={{ marginBottom: 12 }}>📊 Asset Allocation</h4>
 
-      {/* Asset Allocation */}
-      <h4>📊 Asset Allocation</h4>
-      <p>Stocks: ₹{Math.round(allocation.stocks).toLocaleString()}</p>
-      <p>MF: ₹{Math.round(allocation.mf).toLocaleString()}</p>
-      <p>ETF: ₹{Math.round(allocation.etf).toLocaleString()}</p>
-      <p>SGB: ₹{Math.round(allocation.sgb).toLocaleString()}</p>
+        {[
+          { label: "Stocks", value: assetTotals.stocks },
+          { label: "Mutual Funds", value: assetTotals.mf },
+          { label: "ETF", value: assetTotals.etf },
+          { label: "SGB", value: assetTotals.sgb }
+        ].map((item) => {
+          const pct = totalValue
+            ? ((item.value / totalValue) * 100).toFixed(1)
+            : 0;
+
+          return (
+            <div key={item.label} style={{ marginBottom: 10 }}>
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 13
+              }}>
+                <span>{item.label}</span>
+                <span>{pct}%</span>
+              </div>
+
+              <div style={{
+                height: 6,
+                background: "#1f2937",
+                borderRadius: 6,
+                overflow: "hidden"
+              }}>
+                <div style={{
+                  width: `${pct}%`,
+                  background: "#3b82f6",
+                  height: "100%"
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   </>
 )}

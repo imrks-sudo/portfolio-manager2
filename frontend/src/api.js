@@ -38,3 +38,10 @@ export const updateHolding = (id, data) =>
 
 export const updatePrices = () =>
   axios.get("http://localhost:5000/prices/update");
+
+export const getHistory = () =>
+  axios.get("http://localhost:5000/portfolio/history");
+
+export const getNifty = () => {
+  return axios.get("http://localhost:5000/nifty");
+};
