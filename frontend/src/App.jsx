@@ -31,6 +31,13 @@ const formatPercent = (value, total) =>
 function App() {
   const [data, setData] = useState([]);
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
+  const theme = {
+  bg: dark ? "#020617" : "#ffffff",
+  card: dark ? "#020617" : "#f9fafb",
+  border: dark ? "#1f2937" : "#e5e7eb",
+  text: dark ? "#e5e7eb" : "#111827",
+  subText: dark ? "#9ca3af" : "#6b7280",
+};
   const [view, setView] = useState("dashboard");
 
   const [previewData, setPreviewData] = useState([]);
@@ -476,20 +483,42 @@ const summary = {
 };
 
   return (
-    <div className={dark ? "app dark" : "app"}>
-      <aside className="sidebar">
+    <div
+  className={dark ? "app dark" : "app"}
+  style={{
+    background: theme.bg,
+    minHeight: "100vh",
+    color: theme.text
+  }}
+>
+      <aside
+  className="sidebar"
+  style={{
+    background: theme.card,
+    color: theme.text,
+    borderRight: `1px solid ${theme.border}`
+  }}
+>
         <h2>Portfolio AI</h2>
 
         <p onClick={() => setView("dashboard")}>🏠 Dashboard</p>
         <p onClick={() => setView("analytics")}>📊 Analytics</p>
         <p onClick={() => setView("insights")}>💡 Insights</p>
+        <p onClick={() => setView("help")}>❓ Help</p>
+        <p onClick={() => setView("about")}>ℹ️ About</p>
+        <p onClick={() => setView("support")}>❤️ Support</p>
 
         <button onClick={() => setDark(!dark)}>
           {dark ? "☀️ Light" : "🌙 Dark"}
         </button>
       </aside>
 
-      <main className="main">
+      <main
+  className="main"
+  style={{
+    color: theme.text
+  }}
+>
 
         {/* DASHBOARD */}
         {view === "dashboard" && (
@@ -507,17 +536,19 @@ const summary = {
         gap: 12
       }}>
 
+      
+
         {/* CSV UPLOAD */}
         <div style={{
           display: "flex",
           alignItems: "center",
           gap: 10,
-          background: "#020617",
+          background: theme.card,
           padding: "8px 12px",
           borderRadius: 8,
-          border: "1px solid #1f2937"
+          border: `1px solid ${theme.border}`
         }}>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>
+          <span style={{ fontSize: 12, color: theme.subText }}>
             Import CSV
           </span>
 
@@ -532,7 +563,7 @@ const summary = {
             borderRadius: 8,
             background: "#3b82f6",
             border: "none",
-            color: "#fff",
+            color: theme.text,
             fontSize: 13,
             cursor: "pointer"
           }}
@@ -546,7 +577,7 @@ const summary = {
     {/* 🔶 PREVIEW PANEL */}
     {showPreview && (
       <div className="card" style={{ marginBottom: 20, padding: 16 }}>
-        <h3 style={{ marginBottom: 10 }}>
+        <h3 style={{ color: theme.text }}>
           📄 Preview Upload ({previewData.length} items)
         </h3>
 
@@ -610,9 +641,9 @@ const summary = {
             style={{
               padding: "6px 12px",
               borderRadius: 6,
-              background: "#111827",
+              background: theme.card,
               border: "1px solid #374151",
-              color: "#9ca3af"
+              color: theme.subText
             }}
           >
             Cancel
@@ -623,9 +654,9 @@ const summary = {
             style={{
               padding: "6px 12px",
               borderRadius: 6,
-              background: "#22c55e",
+              background: theme.card,
               border: "none",
-              color: "#fff"
+              color: theme.text
             }}
           >
             Confirm Upload
@@ -641,25 +672,49 @@ const summary = {
       gap: 14,
       marginBottom: 20
     }}>
-      <div className="card">
-        <h3>Investment</h3>
+      <div
+  className="card"
+  style={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`
+  }}
+>
+        <h3 style={{ color: theme.text }}>Investment</h3>
         <p>₹{totalInvestment.toLocaleString()}</p>
       </div>
 
-      <div className="card">
-        <h3>Value</h3>
+      <div
+  className="card"
+  style={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`
+  }}
+>
+        <h3 style={{ color: theme.text }}>Value</h3>
         <p>₹{totalValue.toLocaleString()}</p>
       </div>
 
-      <div className="card">
-        <h3>P&L</h3>
+      <div
+  className="card"
+  style={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`
+  }}
+>
+        <h3 style={{ color: theme.text }}>P&L</h3>
         <p className={totalPnL > 0 ? "green" : "red"}>
           ₹{totalPnL.toLocaleString()}
         </p>
       </div>
 
-      <div className="card">
-        <h3>P&L (%)</h3>
+      <div
+  className="card"
+  style={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`
+  }}
+>
+        <h3 style={{ color: theme.text }}>P&L (%)</h3>
         <p className={totalPnLPct > 0 ? "green" : "red"}>
           {totalPnLPct.toFixed(2)}%
         </p>
@@ -668,7 +723,7 @@ const summary = {
 
             {/* ADD HOLDING */}
             <div className="card" style={{ marginTop: 20 }}>
-              <h3>Add Holding</h3>
+              <h3 style={{ color: theme.text }}>Add Holding</h3>
               <div className="flex">
                 <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} />
                 <input placeholder="Quantity" type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
@@ -778,7 +833,7 @@ const summary = {
 
     {/* Sector */}
     <div className="card" style={{ flex: 1, minWidth: 420 }}>
-      <h3>Sector</h3>
+      <h3 style={{ color: theme.text }}>Sector</h3>
 
       <PieChart width={340} height={300}>
 
@@ -798,7 +853,7 @@ const summary = {
           x="50%"
           y="45%"
           textAnchor="middle"
-          style={{ fill: "#9ca3af", fontSize: 11 }}
+          style={{ fill: dark ? "#9ca3af" : "#6b7280", fontSize: 11 }}
         >
           Total
         </text>
@@ -807,7 +862,7 @@ const summary = {
           x="50%"
           y="55%"
           textAnchor="middle"
-          style={{ fill: "#fff", fontSize: 16, fontWeight: 600 }}
+          style={{ fill: dark ? "#fff" : "#111827", fontSize: 16, fontWeight: 600 }}
         >
           ₹{format2(totalValue)}
         </text>
@@ -826,7 +881,7 @@ const summary = {
 
     {/* Asset */}
     <div className="card" style={{ flex: 1, minWidth: 420 }}>
-      <h3>Asset Allocation</h3>
+      <h3 style={{ color: theme.text }}>Asset Allocation</h3>
 
       <PieChart width={340} height={300}>
 
@@ -846,7 +901,7 @@ const summary = {
           x="50%"
           y="45%"
           textAnchor="middle"
-          style={{ fill: "#9ca3af", fontSize: 11 }}
+          style={{ fill: dark ? "#9ca3af" : "#6b7280", fontSize: 11 }}
         >
           Total
         </text>
@@ -855,7 +910,7 @@ const summary = {
           x="50%"
           y="55%"
           textAnchor="middle"
-          style={{ fill: "#fff", fontSize: 16, fontWeight: 600 }}
+          style={{ fill: dark ? "#fff" : "#111827", fontSize: 16, fontWeight: 600 }}
         >
           ₹{format2(
             assetData.reduce((s, d) => s + d.value, 0)
@@ -884,7 +939,7 @@ const summary = {
 {view === "insights" && (
   <div className="card" style={{ marginBottom: 20, padding: 20 }}>
 
-    <h3 style={{ marginBottom: 16 }}>🔥 FIRE Planner</h3>
+    <h3 style={{ color: theme.text }}>🔥 FIRE Planner</h3>
 
     {/* 🔹 LEFT + RIGHT WRAPPER */}
     <div style={{
@@ -898,10 +953,10 @@ const summary = {
         flex: 1,
         minWidth: 320,
         maxWidth: 420,
-        background: "#020617",
+        background: theme.card,
         padding: 16,
         borderRadius: 12,
-        border: "1px solid #1f2937"
+        border: `1px solid ${theme.border}`
       }}>
 
         {[
@@ -918,7 +973,7 @@ const summary = {
               justifyContent: "space-between",
               marginBottom: 6
             }}>
-              <span style={{ fontSize: 12, color: "#9ca3af" }}>
+              <span style={{ fontSize: 12, color: theme.subText }}>
                 {item.label}
               </span>
 
@@ -928,11 +983,11 @@ const summary = {
                 onChange={(e) => item.set(Number(e.target.value) || 0)}
                 style={{
                   width: 100,
-                  background: "#020617",
-                  border: "1px solid #374151",
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
                   borderRadius: 6,
                   padding: "4px 6px",
-                  color: "#e5e7eb",
+                  color: theme.text,
                   fontSize: 12,
                   textAlign: "right"
                 }}
@@ -964,9 +1019,9 @@ const summary = {
               padding: "5px 10px",
               fontSize: 11,
               borderRadius: 6,
-              background: "#111827",
+              background: theme.card,
               border: "1px solid #374151",
-              color: "#9ca3af"
+              color: theme.subText
             }}
           >
             Reset
@@ -985,45 +1040,49 @@ const summary = {
       }}>
 
         <div style={{
-          background: "linear-gradient(135deg, #1e3a8a, #020617)",
+          background: dark
+  ? "linear-gradient(135deg, #0f172a, #020617)"
+  : theme.card,
           padding: 18,
           borderRadius: 12,
-          border: "1px solid #1f2937"
+          border: `1px solid ${theme.border}`
         }}>
           <p style={{ fontSize: 12, color: "#93c5fd" }}>🎯 FIRE Target</p>
           <h2>₹{futureValue.toLocaleString()}</h2>
         </div>
 
         <div style={{
-          background: "linear-gradient(135deg, #065f46, #020617)",
+          background: dark
+  ? "linear-gradient(135deg, #0f172a, #020617)"
+  : theme.card,
           padding: 18,
           borderRadius: 12,
-          border: "1px solid #1f2937"
+          border: `1px solid ${theme.border}`
         }}>
           <p style={{ fontSize: 12, color: "#6ee7b7" }}>💸 Monthly SIP Needed</p>
           <h2>₹{requiredSip.toLocaleString()}</h2>
         </div>
 
         <div style={{
-          background: "#020617",
+          background: theme.card,
           padding: 18,
           borderRadius: 12,
-          border: "1px solid #1f2937"
+          border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: "#9ca3af" }}>📈 Progress</p>
+          <p style={{ fontSize: 12, color: theme.subText }}>📈 Progress</p>
 
           <h2>{progress.toFixed(1)}%</h2>
 
           <div style={{
             height: 6,
-            background: "#1f2937",
+            background: dark ? "#1f2937" : "#e5e7eb",
             borderRadius: 6,
             marginTop: 10,
             overflow: "hidden"
           }}>
             <div style={{
               width: `${progress}%`,
-              background: "#22c55e",
+              background: theme.card,
               height: "100%",
               borderRadius: 6,
               transition: "width 0.4s ease"
@@ -1042,7 +1101,7 @@ const summary = {
 {view === "insights" && (
   <>
     <div className="card" style={{ marginTop: 20 }}>
-      <h3 style={{ marginBottom: 16 }}>💡 Insights</h3>
+      <h3 style={{ color: theme.text }}>💡 Insights</h3>
 
       <div style={{
         display: "grid",
@@ -1053,10 +1112,10 @@ const summary = {
         <div style={{
           padding: 16,
           borderRadius: 12,
-          background: "#111827",
-          border: "1px solid #1f2937"
+          background: theme.card,
+          border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: "#9ca3af" }}>10% Rule</p>
+          <p style={{ fontSize: 12, color: theme.subText }}>10% Rule</p>
           <h4 style={{ color: "#22c55e" }}>✅ Within Limit</h4>
         </div>
       </div>
@@ -1064,8 +1123,8 @@ const summary = {
       <div style={{
         padding: 16,
         borderRadius: 12,
-        background: "#111827",
-        border: "1px solid #1f2937"
+        background: theme.card,
+        border: `1px solid ${theme.border}`
       }}>
         <h4 style={{ marginBottom: 12 }}>📊 Asset Allocation</h4>
 
@@ -1092,13 +1151,13 @@ const summary = {
 
               <div style={{
                 height: 6,
-                background: "#1f2937",
+                background: dark ? "#1f2937" : "#e5e7eb",
                 borderRadius: 6,
                 overflow: "hidden"
               }}>
                 <div style={{
                   width: `${pct}%`,
-                  background: "#3b82f6",
+                  background: theme.card,
                   height: "100%"
                 }} />
               </div>
@@ -1108,6 +1167,110 @@ const summary = {
       </div>
     </div>
   </>
+)}
+
+{view === "help" && (
+  <div className="card" style={{ padding: 20 }}>
+    <h2>❓ How to Use</h2>
+
+    <div style={{ marginTop: 16, lineHeight: 1.6 }}>
+
+      <h3 style={{ color: theme.text }}>📥 Upload Portfolio</h3>
+      <ol>
+        <li>Download holdings CSV from your broker (Zerodha, etc.)</li>
+        <li>Go to Dashboard → Import CSV</li>
+        <li>Upload file</li>
+        <li>Review preview screen</li>
+        <li>Click "Confirm Upload"</li>
+        <li>Click "Update prices"</li>
+      </ol>
+
+      <h3 style={{ color: theme.text }}>📊 What We Read</h3>
+      <ul>
+        <li>Symbol / Stock Name</li>
+        <li>Quantity</li>
+        <li>Average Price</li>
+        <li>Sector (optional)</li>
+      </ul>
+
+      <h3 style={{ color: theme.text }}>⚠️ Important Notes</h3>
+      <ul>
+        <li>Uploading updates your portfolio</li>
+        <li>Missing stocks will be removed</li>
+        <li>No data is shared externally</li>
+      </ul>
+
+    </div>
+  </div>
+)}
+
+{view === "about" && (
+  <div className="card" style={{ padding: 20 }}>
+    <h2>ℹ️ About This Project</h2>
+
+    <p style={{ marginTop: 12, lineHeight: 1.6 }}>
+      This tool was built to simplify portfolio tracking for individual investors.
+      Most tools are either too complex or require logins and tracking.
+    </p>
+
+    <p style={{ marginTop: 12 }}>
+      The goal is simple:
+      <br />
+      <strong>Upload your holdings → get instant insights.</strong>
+    </p>
+
+    <h3 style={{ color: theme.text }}>💡 Why I Built This</h3>
+    <p>
+      I wanted a clean, fast, no-login tool to track my investments
+      without relying on Excel or complicated apps.
+    </p>
+
+    <h3 style={{ color: theme.text }}>📬 Contact</h3>
+    <p>
+      Have feedback or ideas?
+      <br />
+      📧 rakeshkmr556@gmail.com
+    </p>
+  </div>
+)}
+
+{view === "support" && (
+  <div className="card" style={{ padding: 20 }}>
+    <h2>❤️ Support This Project</h2>
+
+    <p style={{ marginTop: 12 }}>
+      This tool is completely free to use.
+    </p>
+
+    <p style={{ marginTop: 10 }}>
+      If you find it useful, consider supporting ❤️
+    </p>
+
+    <div style={{
+  marginTop: 20,
+  padding: 16,
+  borderRadius: 10,
+  background: theme.card,
+  border: `1px solid ${theme.border}`
+}}>
+  <p style={{ marginBottom: 10 }}>💸 Donate via UPI</p>
+
+  <strong>9176177421@pthdfc</strong>
+
+  {/* 👇 ADD IMAGE HERE */}
+  <div style={{ marginTop: 12 }}>
+    <img
+      src="/QR.jpeg"
+      alt="UPI QR"
+      style={{ width: 160, borderRadius: 8 }}
+    />
+  </div>
+
+  <p style={{ fontSize: 12, color: theme.subText, marginTop: 8 }}>
+    (Scan to donate)
+  </p>
+</div>
+  </div>
 )}
 
       </main>
