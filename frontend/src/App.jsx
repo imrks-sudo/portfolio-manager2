@@ -7,8 +7,10 @@ import {
   Tooltip,
 } from "recharts";
 
-const API_URL =
-  import.meta.env.VITE_API_URL;
+console.log("API URL:", import.meta.env.VITE_API_URL);
+
+const API_URL = import.meta.env.VITE_API_URL;
+
 import Papa from "papaparse";
 
 const PROFILE_KEY = "activeProfile";
