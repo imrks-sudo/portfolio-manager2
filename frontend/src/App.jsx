@@ -8,7 +8,7 @@ import {
 } from "recharts";
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+  import.meta.env.VITE_API_URL;
 import Papa from "papaparse";
 
 const PROFILE_KEY = "activeProfile";
