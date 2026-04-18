@@ -23,3 +23,12 @@ Thumbs.db
 # Dependency directories
 backend/node_modules/
 frontend/node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
