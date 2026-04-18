@@ -17,7 +17,6 @@
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
-    "sqlite3": "^6.0.1",
     "tough-cookie": "^6.0.1",
     "yahoo-finance2": "^2.12.0"
   }
