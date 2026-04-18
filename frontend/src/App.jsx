@@ -7,7 +7,8 @@ import {
   Tooltip,
 } from "recharts";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
 import Papa from "papaparse";
 
 const PROFILE_KEY = "activeProfile";
@@ -322,7 +323,7 @@ data.forEach((d) => {
 
     const symbols = data.map((d) => d.symbol);
 
-    const res = await fetch("http://localhost:5000/update-prices", {
+    const res = await fetch(`${API_URL}/update-prices`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
