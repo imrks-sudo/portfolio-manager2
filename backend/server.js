@@ -5,7 +5,11 @@ const cors = require("cors");
 const axios = require("axios");
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: ["https://portfolio-manager2.vercel.app/"]
+  })
+);
 app.use(express.json());
 
 
