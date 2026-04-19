@@ -7,9 +7,16 @@ import {
   Tooltip,
 } from "recharts";
 
-console.log("API URL:", import.meta.env.VITE_API_URL);
+if (import.meta.env.DEV) {
+  console.log("API URL:", import.meta.env.VITE_API_URL);
+}
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+if (!import.meta.env.VITE_API_URL) {
+  console.warn("⚠️ VITE_API_URL not set. Using localhost fallback.");
+}
 
 import Papa from "papaparse";
 
@@ -40,6 +47,7 @@ const loadLocalPortfolio = () => {
 };
 
 const saveLocalPortfolio = (data) => {
+  
   const profile = getActiveProfile();
   if (!profile) return;
 
@@ -49,7 +57,6 @@ const saveLocalPortfolio = (data) => {
     console.error("Local save failed", e);
   }
 };
-
 
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#845EC2"];
@@ -92,6 +99,14 @@ function App() {
   setData(loadLocalPortfolio());
 };
 
+const refreshProfiles = () => {
+  const list = Object.keys(localStorage)
+    .filter((k) => k.startsWith("portfolio_"))
+    .map((k) => k.replace("portfolio_", ""));
+
+  setProfiles(list);
+};
+
 const handleConfirmUpload = async () => {
   try {
     const enriched = previewData.map(item => {
@@ -107,13 +122,22 @@ const handleConfirmUpload = async () => {
       };
     });
 
-    setData(enriched);
-    saveLocalPortfolio(enriched);
+    // ✅ MERGE INSTEAD OF REPLACE
+    const map = new Map();
+
+    data.forEach(d => map.set(d.symbol, d));
+    enriched.forEach(d => map.set(d.symbol, d));
+
+    const merged = Array.from(map.values());
+
+    setData(merged);
+    saveLocalPortfolio(merged);
+    refreshProfiles();
 
     setShowPreview(false);
     setPreviewData([]);
 
-    alert(`✅ Portfolio updated (${previewData.length} items)`);
+    alert(`✅ Portfolio updated (${enriched.length} items)`);
   } catch (err) {
     console.error(err);
     alert("❌ Upload failed");
@@ -320,16 +344,25 @@ data.forEach((d) => {
     : 0;
 
   const handleUpdatePrices = async () => {
+    if (!data.length) {
+  alert("⚠️ No holdings to update");
+  return;
+}
   try {
     setUpdatingPrices(true);
 
-    const symbols = data.map((d) => d.symbol);
+    const symbols = data.map((d) =>
+    d.symbol.replace(/-E$|-GB$/i, "")
+  );
 
     const res = await fetch(`${API_URL}/update-prices`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-      },
+  "Content-Type": "application/json",
+  ...(import.meta.env.VITE_API_KEY && {
+    "x-api-key": import.meta.env.VITE_API_KEY,
+  }),
+},
       body: JSON.stringify({ symbols }),
     });
 
@@ -340,10 +373,16 @@ data.forEach((d) => {
     const json = await res.json();
     const backendData = json.data || [];
 
-    const updated = data.map((item) => {
-      const match = backendData.find(
-        (p) => p.symbol === item.symbol
-      );
+    const priceMap = new Map(
+  backendData.map(p => [
+    p.symbol.replace(/-E$|-GB$/i, ""),
+    p
+  ])
+);
+
+const updated = data.map((item) => {
+  const key = item.symbol.replace(/-E$|-GB$/i, "");
+  const match = priceMap.get(key);
 
       if (!match) return item;
 
@@ -364,9 +403,7 @@ data.forEach((d) => {
 
     setData(updated);
     saveLocalPortfolio(updated);
-    setProfiles((prev) =>
-  prev.includes(profile) ? prev : [...prev, profile]
-);
+    refreshProfiles();
 
     alert("✅ Prices updated successfully");
 
@@ -766,7 +803,7 @@ if (!profile) {
 
         setActiveProfile(name);
         setProfile(name);
-        setProfiles([...profiles, name]);
+        refreshProfiles();
         setData([]);
       } else {
         switchProfile(e.target.value);
@@ -1056,9 +1093,7 @@ if (exists) {
 
 setData(updated);
 saveLocalPortfolio(updated);
-setProfiles((prev) =>
-  prev.includes(profile) ? prev : [...prev, profile]
-);
+refreshProfiles();
 
 setForm({
   symbol: "",
@@ -1129,9 +1164,8 @@ setForm({
 
 setData(updated);
 saveLocalPortfolio(updated);
-setProfiles((prev) =>
-  prev.includes(profile) ? prev : [...prev, profile]
-);
+refreshProfiles();
+
 setEditingId(null);
                             }}>✅</button>
 
@@ -1152,9 +1186,8 @@ setEditingId(null);
 
     setData(updated);
     saveLocalPortfolio(updated);
-    setProfiles((prev) =>
-  prev.includes(profile) ? prev : [...prev, profile]
-);
+    refreshProfiles();
+
   }}
 >
   🗑

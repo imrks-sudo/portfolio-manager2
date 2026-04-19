@@ -1,16 +1,44 @@
 const PORT = process.env.PORT || 5000;
+const API_KEY = process.env.API_KEY;
 
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
 const app = express();
-app.use(
-  cors({
-    origin: ["https://portfolio-manager2-27voijknf-imrks-sudos-projects.vercel.app"]
-  })
-);
+app.use(cors({
+  origin: [
+    "https://myportfoliomanager.vercel.app"
+  ],
+  methods: ["GET", "POST"],
+}));
+
+const rateLimit = require("express-rate-limit");
+
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 min
+  max: 20, // max 20 requests/min
+});
+
+app.use(limiter);
+
 app.use(express.json());
+
+// 🔐 API KEY PROTECTION
+app.use((req, res, next) => {
+  const key = req.headers["x-api-key"];
+
+  if (!API_KEY) {
+    console.warn("⚠️ API_KEY not set in environment");
+    return next(); // fallback (optional)
+  }
+
+  if (!key || key !== API_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+});
 
 
 const { wrapper } = require("axios-cookiejar-support");
@@ -18,22 +46,6 @@ const tough = require("tough-cookie");
 
 // ✅ Create cookie jar
 const jar = new tough.CookieJar();
-
-// ✅ Wrap axios
-const client = wrapper(
-  axios.create({
-    jar,
-    withCredentials: true,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-      Accept: "application/json, text/plain, */*",
-      Referer: "https://www.nseindia.com/",
-      "Accept-Language": "en-US,en;q=0.9",
-      Connection: "keep-alive",
-    },
-  })
-);
 
 app.post("/update-prices", async (req, res) => {
   try {
@@ -149,11 +161,23 @@ const schemeCode = bestMatch.schemeCode;
           if (symbol.endsWith("-E")) symbol = symbol.replace("-E", "");
           if (symbol.endsWith("-GB")) symbol = symbol.replace("-GB", "");
 
-          const response = await nse.get(
-            `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
-          );
+          let response;
 
-          price = Number(response.data?.priceInfo?.lastPrice) || 0;
+try {
+  response = await nse.get(
+    `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+  );
+} catch (err) {
+  console.log("⚠️ NSE retry for", symbol);
+
+  // retry cookie + request
+  await nse.get("/");
+  response = await nse.get(
+    `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+  );
+}
+
+price = Number(response.data?.priceInfo?.lastPrice) || 0;
 
           console.log(
   `%c${symbol} → ₹${price}`,
