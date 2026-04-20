@@ -185,6 +185,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .app.dark .table th {
   background: #020617;
+  color: #9ca3af;
 }
 
 .table td {
@@ -198,6 +199,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .app.dark .table td {
   border-color: #1f2937;
+  color: #e5e7eb;
 }
 
 .table tr:hover {
