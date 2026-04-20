@@ -1758,35 +1758,40 @@ color: dark ? "#e5e7eb" : "#111827",
       </ul>
 
       {/* Notes Section */}
-      <h3 style={{ color: theme.text, marginTop: 18 }}>
-        ⚠️ Important Notes
-      </h3>
-      <ul style={{ paddingLeft: 18 }}>
-        <li>
-          Uploading a CSV will <b>reset current price to 0. </b>.
-        </li>
-        <li>
-          Stocks missing in the CSV will be <b>removed</b>.
-        </li>
-         <li>
-          Stocks updated in the CSV will be <b>updated</b>.
-        </li>
-        <li>
-          After uploading view the preview to see the <b>updated/ deleted or same</b> holdings.
-        </li>
-        <li>
-          You can manually add/delete holdings using <b>Add Holding</b>.
-        </li>
-        <li>
-          After manual changes, always click <b>Update Prices</b>.
-        </li>
-        <li>
-          You can edit quantity and average price directly in the table.
-        </li>
-        <li>
-          Your data is stored locally in your browser — <b>nothing is shared externally</b>.
-        </li>
-      </ul>
+<h3 style={{ color: theme.text, marginTop: 18 }}>
+  ⚠️ Important Notes
+</h3>
+
+<ul style={{ paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>
+  <li>
+    Uploading a CSV will <b>reset current prices to 0</b>.  
+    Click <b>Update Prices</b> after upload.
+  </li>
+
+  <li>
+    Holdings missing in the CSV will be <b>removed</b>.
+  </li>
+
+  <li>
+    Existing holdings in the CSV will be <b>updated</b>.
+  </li>
+
+  <li>
+    Use the preview screen to review <b>added, updated, and removed</b> holdings before confirming.
+  </li>
+
+  <li>
+    You can manually add or delete holdings using <b>Add Holding</b>.
+  </li>
+
+  <li>
+    You can edit quantity and average price directly in the table.
+  </li>
+
+  <li>
+    Your data is stored locally in your browser — <b>nothing is shared externally</b>.
+  </li>
+</ul>
 
     </div>
   </div>
