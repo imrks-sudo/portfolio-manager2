@@ -1716,33 +1716,70 @@ color: dark ? "#e5e7eb" : "#111827",
 
 {view === "help" && (
   <div className="card" style={{ padding: 20 }}>
-    <h2>❓ How to Use</h2>
+    <h2 style={{ marginBottom: 12 }}>❓ How to Use</h2>
 
-    <div style={{ marginTop: 16, lineHeight: 1.6 }}>
+    <div style={{ marginTop: 12, lineHeight: 1.7, fontSize: 13 }}>
 
-      <h3 style={{ color: theme.text }}>📥 Upload Portfolio</h3>
-      <ol>
-        <li>Download holdings CSV from your broker (Zerodha, etc.)</li>
-        <li>Go to Dashboard → Import CSV</li>
-        <li>Upload file</li>
-        <li>Review preview screen</li>
-        <li>Click "Confirm Upload"</li>
-        <li>Click "Update prices"</li>
+      {/* Upload Section */}
+      <h3 style={{ color: theme.text, marginTop: 10 }}>
+        📥 Upload Portfolio
+      </h3>
+      <ol style={{ paddingLeft: 18 }}>
+        <li>
+          Download holdings file (XLS) from your broker (e.g. Zerodha).
+        </li>
+        <li>
+          For Zerodha: keep only the <b>combined sheet</b> (delete stocks/MF sheets).
+          Other brokers may differ.
+        </li>
+        <li>
+          Open the file and <b>Save As → CSV</b>.
+        </li>
+        <li>
+          Go to <b>Dashboard → Import CSV</b>.
+        </li>
+        <li>
+          Review the preview screen.
+        </li>
+        <li>
+          Click <b>Confirm Upload</b>, then <b>Update Prices</b>.
+        </li>
       </ol>
 
-      <h3 style={{ color: theme.text }}>📊 What We Read</h3>
-      <ul>
+      {/* Data Section */}
+      <h3 style={{ color: theme.text, marginTop: 18 }}>
+        📊 What We Read
+      </h3>
+      <ul style={{ paddingLeft: 18 }}>
         <li>Symbol / Stock Name</li>
         <li>Quantity</li>
         <li>Average Price</li>
         <li>Sector (optional)</li>
       </ul>
 
-      <h3 style={{ color: theme.text }}>⚠️ Important Notes</h3>
-      <ul>
-        <li>Uploading updates your portfolio</li>
-        <li>Missing stocks will be removed</li>
-        <li>No data is shared externally</li>
+      {/* Notes Section */}
+      <h3 style={{ color: theme.text, marginTop: 18 }}>
+        ⚠️ Important Notes
+      </h3>
+      <ul style={{ paddingLeft: 18 }}>
+        <li>
+          Uploading a CSV will <b>overwrite your current portfolio</b>.
+        </li>
+        <li>
+          Stocks missing in the CSV will be <b>removed</b>.
+        </li>
+        <li>
+          You can manually add/delete holdings using <b>Add Holding</b>.
+        </li>
+        <li>
+          After manual changes, always click <b>Update Prices</b>.
+        </li>
+        <li>
+          You can edit quantity and average price directly in the table.
+        </li>
+        <li>
+          Your data is stored locally in your browser — <b>nothing is shared externally</b>.
+        </li>
       </ul>
 
     </div>
@@ -1751,65 +1788,102 @@ color: dark ? "#e5e7eb" : "#111827",
 
 {view === "about" && (
   <div className="card" style={{ padding: 20 }}>
-    <h2>ℹ️ About This Project</h2>
+    <h2 style={{ marginBottom: 12 }}>ℹ️ About This Project</h2>
 
-    <p style={{ marginTop: 12, lineHeight: 1.6 }}>
-      This tool was built to simplify portfolio tracking for individual investors.
-      Most tools are either too complex or require logins and tracking.
+    <p style={{ marginTop: 12, lineHeight: 1.7, fontSize: 13 }}>
+      This tool is built to simplify portfolio tracking for individual investors.
+      Most existing tools are either too complex or require logins and sharing
+      of sensitive financial data.
     </p>
 
-    <p style={{ marginTop: 12 }}>
-      The goal is simple:
+    <p style={{ marginTop: 12, lineHeight: 1.7, fontSize: 13 }}>
+      This project is designed as a clean, private, and user-friendly alternative —
+      helping you manage your investments without unnecessary friction.
+    </p>
+
+    <div style={{ marginTop: 16 }}>
+      <p style={{ fontSize: 13 }}>
+        <strong>Simple workflow:</strong>
+      </p>
+      <p style={{ fontSize: 13, marginTop: 4 }}>
+        📥 Upload holdings → ⚡ Get instant insights → 📊 Track performance
+      </p>
+    </div>
+
+    <h3 style={{ color: theme.text, marginTop: 18 }}>
+      💡 Why I Built This
+    </h3>
+    <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+      I wanted a fast, no-login tool to track my investments without relying
+      on spreadsheets or complicated platforms. This app focuses on speed,
+      simplicity, and privacy.
+    </p>
+
+    <h3 style={{ color: theme.text, marginTop: 18 }}>
+      🔒 Privacy First
+    </h3>
+    <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+      All your data stays in your browser (local storage).
+      Nothing is stored on servers or shared externally.
+    </p>
+
+    <h3 style={{ color: theme.text, marginTop: 18 }}>
+      📬 Contact
+    </h3>
+    <p style={{ fontSize: 13, lineHeight: 1.7 }}>
+      Have feedback, suggestions, or ideas?
       <br />
-      <strong>Upload your holdings → get instant insights.</strong>
-    </p>
-
-    <h3 style={{ color: theme.text }}>💡 Why I Built This</h3>
-    <p>
-      I wanted a clean, fast, no-login tool to track my investments
-      without relying on Excel or complicated apps.
-    </p>
-
-    <h3 style={{ color: theme.text }}>📬 Contact</h3>
-    <p>
-      Have feedback or ideas?
-      <br />
-      📧 rakeshkmr556@gmail.com
+      📧 <strong>rakeshkmr556@gmail.com</strong>
     </p>
   </div>
 )}
 
 {view === "support" && (
   <div className="card" style={{ padding: 20 }}>
-    <h2>❤️ Support This Project</h2>
+    <h2 style={{ marginBottom: 12 }}>❤️ Support This Project</h2>
 
-    <p style={{ marginTop: 12 }}>
-      This tool is completely free to use.
+    <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.7 }}>
+      This tool is completely free to use and built to help individual investors
+      track their portfolios with simplicity and privacy.
     </p>
 
-    <p style={{ marginTop: 10 }}>
+    <p style={{ marginTop: 10, fontSize: 13 }}>
       If you find it useful, consider supporting ❤️
     </p>
 
-    <div style={{
-      marginTop: 20,
-      padding: 16,
-      borderRadius: 10,
-      background: theme.card,
-      border: `1px solid ${theme.border}`
-    }}>
-      <p style={{ marginBottom: 10 }}>💸 Donate via UPI</p>
+    <div
+      style={{
+        marginTop: 20,
+        padding: 16,
+        borderRadius: 10,
+        background: theme.card,
+        border: `1px solid ${theme.border}`,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center"
+      }}
+    >
+      <p style={{ marginBottom: 10, fontWeight: 500 }}>
+        💸 Donate via UPI
+      </p>
 
-      <div style={{ marginTop: 12 }}>
-        <img
-          src="/QR.jpeg"
-          alt="UPI QR"
-          style={{ width: 160, borderRadius: 8 }}
-        />
-      </div>
+      <img
+        src="/QR.jpeg"
+        alt="UPI QR"
+        style={{
+          width: 160,
+          borderRadius: 8,
+          border: `1px solid ${theme.border}`
+        }}
+      />
 
-      <p style={{ fontSize: 12, color: theme.subText, marginTop: 8 }}>
-        (Scan to donate)
+      <p style={{ fontSize: 12, color: theme.subText, marginTop: 10 }}>
+        Scan the QR code using any UPI app
+      </p>
+
+      <p style={{ fontSize: 12, color: theme.subText, marginTop: 4 }}>
+        Your support helps maintain and improve this tool 🙏
       </p>
     </div>
   </div>
