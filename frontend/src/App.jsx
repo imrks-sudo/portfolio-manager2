@@ -11,8 +11,6 @@ if (import.meta.env.DEV) {
   console.log("API URL:", import.meta.env.VITE_API_URL);
 }
 
-console.log("API KEY:", import.meta.env.VITE_API_KEY);
-
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -269,6 +267,10 @@ const getDiffData = () => {
   useEffect(() => {
   fetchData();
 }, []);
+
+useEffect(() => {
+  localStorage.setItem("darkMode", dark);
+}, [dark]);
 
   const totalValue = data.reduce(
   (s, d) => s + (Number(d.currentValue) || 0),
@@ -688,8 +690,8 @@ if (!profile) {
             padding: "10px 12px",
             borderRadius: 8,
             border: `1px solid ${theme.border}`,
-            background: theme.card,
-            color: theme.text,
+            background: "#3b82f6",
+color: "#fff",
             marginBottom: 12
           }}
           onKeyDown={(e) => {
@@ -719,9 +721,9 @@ if (!profile) {
             width: "100%",
             padding: "10px",
             borderRadius: 8,
-            background: "#3b82f6",
+            background: theme.card,
             border: "none",
-            color: "#fff",
+            color: theme.text,
             fontWeight: 500,
             cursor: "pointer"
           }}
@@ -771,9 +773,21 @@ if (!profile) {
         <p onClick={() => setView("about")}>ℹ️ About</p>
         <p onClick={() => setView("support")}>❤️ Support</p>
 
-        <button onClick={() => setDark(!dark)}>
-          {dark ? "☀️ Light" : "🌙 Dark"}
-        </button>
+        <button
+  onClick={() => setDark(prev => !prev)}
+  style={{
+    marginTop: 12,
+    padding: "6px 10px",
+    borderRadius: 6,
+    background: "#3b82f6",
+    border: "none",
+    color: "#fff",
+    fontSize: 12,
+    cursor: "pointer"
+  }}
+>
+  {dark ? "Light" : "Dark"}
+</button>
       </aside>
 
       <main
@@ -791,48 +805,67 @@ if (!profile) {
   <div style={{
     padding: "6px 10px",
     borderRadius: 6,
-    background: "#1f2937",
+    background: dark ? "#1f2937" : "#e5e7eb",
+color: dark ? "#e5e7eb" : "#111827",
     fontSize: 12
   }}>
     👤 {profile}
   </div>
 
-  <select
-    onChange={(e) => {
-      if (e.target.value === "__new__") {
-        const name = prompt("Enter new profile name");
-        if (!name) return;
+<select
+  onChange={(e) => {
+    if (e.target.value === "__new__") {
+      const name = prompt("Enter new profile name");
+      if (!name) return;
 
-        setActiveProfile(name);
-        setProfile(name);
-        refreshProfiles();
-        setData([]);
-      } else {
-        switchProfile(e.target.value);
-      }
-    }}
-  >
-    <option value="">Switch Profile</option>
+      setActiveProfile(name);
+      setProfile(name);
+      saveLocalPortfolio([]); // initialize empty portfolio
+      refreshProfiles();
+      setData([]);
+    } else {
+      switchProfile(e.target.value);
+    }
+  }}
+  style={{
+    padding: "6px 8px",
+    borderRadius: 6,
+    border: `1px solid ${theme.border}`,
+    background: theme.card,
+    color: theme.text,
+    fontSize: 13,
+    cursor: "pointer"
+  }}
+>
+  <option value="">Switch Profile</option>
 
-    {profiles.map((p) => (
-      <option key={p} value={p}>
-        {p}
-      </option>
-    ))}
+  {profiles.map((p) => (
+    <option key={p} value={p}>
+      {p}
+    </option>
+  ))}
 
-    <option value="__new__">➕ New Profile</option>
-  </select>
+  <option value="__new__">➕ New Profile</option>
+</select>
 
   {/* ✅ LOGOUT BUTTON */}
   <button
-    onClick={() => {
-      localStorage.removeItem("activeProfile");
-      setProfile(null);
-      setData([]);
-    }}
-  >
-    Logout
-  </button>
+  onClick={() => {
+    localStorage.removeItem("activeProfile");
+    setProfile(null);
+    setData([]);
+  }}
+  style={{
+    padding: "6px 10px",
+    borderRadius: 6,
+    background: theme.card,
+    border: `1px solid ${theme.border}`,
+    color: theme.text,
+    cursor: "pointer"
+  }}
+>
+  Logout
+</button>
 
 </div>
 
@@ -863,21 +896,40 @@ if (!profile) {
       
 
         {/* CSV UPLOAD */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          background: theme.card,
-          padding: "8px 12px",
-          borderRadius: 8,
-          border: `1px solid ${theme.border}`
-        }}>
-          <span style={{ fontSize: 12, color: theme.subText }}>
-            Import CSV
-          </span>
+      <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    background: theme.card,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: `1px solid ${theme.border}`,
+  }}
+>
+  <span style={{ fontSize: 12, color: theme.subText }}>
+    Import CSV
+  </span>
 
-          <input type="file" onChange={handleFileUpload} />
-        </div>
+  <label
+    style={{
+      fontSize: 12,
+      color: "#3b82f6",
+      cursor: "pointer",
+      padding: "4px 8px",
+      borderRadius: 6,
+      border: `1px solid ${theme.border}`,
+      background: theme.bg,
+    }}
+  >
+    Choose File
+    <input
+      type="file"
+      onChange={handleFileUpload}
+      style={{ display: "none" }}
+    />
+  </label>
+</div>
 
         {/* UPDATE BUTTON */}
         <button
@@ -888,7 +940,7 @@ if (!profile) {
     borderRadius: 8,
     background: updatingPrices ? "#1e3a8a" : "#3b82f6",
     border: "none",
-    color: theme.text,
+    color: "#fff",
     fontSize: 13,
     cursor: updatingPrices ? "not-allowed" : "pointer",
     opacity: updatingPrices ? 0.7 : 1,
@@ -969,7 +1021,7 @@ if (!profile) {
               padding: "6px 12px",
               borderRadius: 6,
               background: theme.card,
-              border: "1px solid #374151",
+              border: `1px solid ${theme.border}`,
               color: theme.subText
             }}
           >
@@ -979,12 +1031,12 @@ if (!profile) {
           <button
             onClick={handleConfirmUpload}
             style={{
-              padding: "6px 12px",
-              borderRadius: 6,
-              background: theme.card,
-              border: "none",
-              color: theme.text
-            }}
+  padding: "6px 12px",
+  borderRadius: 6,
+  background: "#3b82f6",
+  border: "none",
+  color: "#fff"
+}}
           >
             Confirm Upload
           </button>
@@ -1063,49 +1115,61 @@ if (!profile) {
                 <input placeholder="Avg Price" type="number" style={{ width: "80px" }} value={form.avgPrice} onChange={(e) => setForm({ ...form, avgPrice: e.target.value })} />
                 <input placeholder="Sector" value={form.sector} onChange={(e) => setForm({ ...form, sector: e.target.value })} />
 
-                <button onClick={async () => {
-                  if (!form.symbol || !form.quantity || !form.avgPrice) return;
+              <button
+  onClick={async () => {
+    if (!form.symbol || !form.quantity || !form.avgPrice) return;
 
-                  const newItem = {
-  symbol: form.symbol.trim().toUpperCase(),
-  quantity: Number(form.quantity),
-  avgPrice: Number(form.avgPrice),
-  sector: form.sector || "Others",
-};
+    const newItem = {
+      symbol: form.symbol.trim().toUpperCase(),
+      quantity: Number(form.quantity),
+      avgPrice: Number(form.avgPrice),
+      sector: form.sector || "Others",
+    };
 
-const exists = data.find(
-  (item) => item.symbol === newItem.symbol
-);
+    const exists = data.find(
+      (item) => item.symbol === newItem.symbol
+    );
 
-let updated;
+    let updated;
 
-if (exists) {
-  updated = data.map((item) =>
-    item.symbol === newItem.symbol
-      ? {
-          ...item,
-          quantity: item.quantity + newItem.quantity,
-          avgPrice: newItem.avgPrice,
-        }
-      : item
-  );
-} else {
-  updated = [...data, newItem];
-}
+    if (exists) {
+      updated = data.map((item) =>
+        item.symbol === newItem.symbol
+          ? {
+              ...item,
+              quantity: item.quantity + newItem.quantity,
+              avgPrice: newItem.avgPrice,
+            }
+          : item
+      );
+    } else {
+      updated = [...data, newItem];
+    }
 
-setData(updated);
-saveLocalPortfolio(updated);
-refreshProfiles();
+    setData(updated);
+    saveLocalPortfolio(updated);
+    refreshProfiles();
 
-setForm({
-  symbol: "",
-  quantity: "",
-  avgPrice: "",
-  sector: "",
-});
-                }}>
-                  ➕ Add
-                </button>
+    setForm({
+      symbol: "",
+      quantity: "",
+      avgPrice: "",
+      sector: "",
+    });
+  }}
+  style={{
+    padding: "6px 12px",
+    borderRadius: 6,
+    background: "#3b82f6",
+    border: "none",
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: 13,
+    transition: "all 0.2s ease"
+  }}
+>
+  ➕ Add
+</button> 
               </div>
             </div>
 
@@ -1132,75 +1196,164 @@ setForm({
                 </tr>
               </thead>
 
-              <tbody>
-                {data.map((d) => {
-                  const isEditing = editingId === d.symbol;
+            <tbody>
+  {data.map((d) => {
+    const isEditing = editingId === d.symbol;
 
-                  return (
-                    <tr key={d.symbol}>
-                      <td>{d.symbol}</td>
-                      <td>{d.sector}</td>
+    return (
+      <tr key={d.symbol}>
+        <td>{d.symbol}</td>
+        <td>{d.sector}</td>
 
-                      <td>{isEditing ? <input type="number" style={{ width: "80px" }} value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} /> : d.quantity}</td>
+        <td>
+          {isEditing ? (
+            <input
+              type="number"
+              style={{ width: "80px" }}
+              value={editForm.quantity}
+              onChange={(e) =>
+                setEditForm({ ...editForm, quantity: e.target.value })
+              }
+            />
+          ) : (
+            d.quantity
+          )}
+        </td>
 
-                      <td>{isEditing ? <input type="number" style={{ width: "80px" }} value={editForm.avgPrice} onChange={(e) => setEditForm({ ...editForm, avgPrice: e.target.value })} /> : d.avgPrice}</td>
+        <td>
+          {isEditing ? (
+            <input
+              type="number"
+              style={{ width: "80px" }}
+              value={editForm.avgPrice}
+              onChange={(e) =>
+                setEditForm({ ...editForm, avgPrice: e.target.value })
+              }
+            />
+          ) : (
+            d.avgPrice
+          )}
+        </td>
 
-                      <td>{d.currentPrice?.toFixed(2)}</td>
-                      <td>{d.currentValue?.toFixed(0)}</td>
-                      <td className={d.pnl > 0 ? "green" : "red"}>{d.pnl?.toFixed(0)}</td>
-                      <td>{isNaN(d.pnlPct) ? "0.00%" : Number(d.pnlPct).toFixed(2) + "%"}</td>
+        <td>{d.currentPrice?.toFixed(2)}</td>
+        <td>{d.currentValue?.toFixed(0)}</td>
+        <td className={d.pnl > 0 ? "green" : "red"}>
+          {d.pnl?.toFixed(0)}
+        </td>
+        <td>
+          {isNaN(d.pnlPct)
+            ? "0.00%"
+            : Number(d.pnlPct).toFixed(2) + "%"}
+        </td>
 
-                      <td>
-                        {isEditing ? (
-                          <>
-                            <button onClick={async () => {
-                              const updated = data.map(item =>
-  item.symbol === d.symbol
-    ? {
-        ...item,
-        quantity: Number(editForm.quantity),
-        avgPrice: Number(editForm.avgPrice),
-      }
-    : item
-);
+        <td>
+          <div style={{ display: "flex", gap: 6 }}>
+            {isEditing ? (
+              <>
+                <button
+                  onClick={async () => {
+                    const updated = data.map((item) =>
+                      item.symbol === d.symbol
+                        ? {
+                            ...item,
+                            quantity: Number(editForm.quantity),
+                            avgPrice: Number(editForm.avgPrice),
+                          }
+                        : item
+                    );
 
-setData(updated);
-saveLocalPortfolio(updated);
-refreshProfiles();
+                    setData(updated);
+                    saveLocalPortfolio(updated);
+                    refreshProfiles();
+                    setEditingId(null);
+                  }}
+                  style={{
+                    padding: "4px 6px",
+                    borderRadius: 4,
+                    background: "#22c55e",
+                    border: "none",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                  title="Save"
+                >
+                  ✅
+                </button>
 
-setEditingId(null);
-                            }}>✅</button>
+                <button
+                  onClick={() => setEditingId(null)}
+                  style={{
+                    padding: "4px 6px",
+                    borderRadius: 4,
+                    background: "#ef4444",
+                    border: "none",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                  title="Cancel"
+                >
+                  ❌
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setEditingId(d.symbol);
+                    setEditForm({
+                      quantity: d.quantity,
+                      avgPrice: d.avgPrice,
+                    });
+                  }}
+                  style={{
+                    padding: "4px 6px",
+                    borderRadius: 4,
+                    background: "transparent",
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                  title="Edit"
+                >
+                  ✏️
+                </button>
 
-                            <button onClick={() => setEditingId(null)}>❌</button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => {
-                              setEditingId(d.symbol);
-                              setEditForm({ quantity: d.quantity, avgPrice: d.avgPrice });
-                            }}>✏️</button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm("Delete this holding?")) return;
 
-                            <button
-  onClick={() => {
-    if (!window.confirm("Delete this holding?")) return;
+                    const updated = data.filter(
+                      (item) => item.symbol !== d.symbol
+                    );
 
-    const updated = data.filter(item => item.symbol !== d.symbol);
-
-    setData(updated);
-    saveLocalPortfolio(updated);
-    refreshProfiles();
-
-  }}
->
-  🗑
-</button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                    setData(updated);
+                    saveLocalPortfolio(updated);
+                    refreshProfiles();
+                  }}
+                  style={{
+                    padding: "4px 6px",
+                    borderRadius: 4,
+                    background: "transparent",
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                  title="Delete"
+                >
+                  🗑
+                </button>
+              </>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  })}
+</tbody> 
             </table>
           </div>  
           </>
@@ -1255,11 +1408,16 @@ setEditingId(null);
 
         {/* Tooltip */}
         <Tooltip
-          formatter={(value, name, props) => [
-            `₹${format2(value)}`,
-            props.payload.name
-          ]}
-        />
+  contentStyle={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`,
+    color: theme.text
+  }}
+  formatter={(value, name, props) => [
+    `₹${format2(value)}`,
+    props.payload.name
+  ]}
+/>
       </PieChart>
 
       {renderCustomLegend(sectorData)}
@@ -1305,11 +1463,16 @@ setEditingId(null);
 
         {/* Tooltip */}
         <Tooltip
-          formatter={(value, name, props) => [
-            `₹${format2(value)}`,
-            props.payload.name
-          ]}
-        />
+  contentStyle={{
+    background: theme.card,
+    border: `1px solid ${theme.border}`,
+    color: theme.text
+  }}
+  formatter={(value, name, props) => [
+    `₹${format2(value)}`,
+    props.payload.name
+  ]}
+/>
       </PieChart>
 
       <div style={{ marginTop: 10 }}>
@@ -1406,7 +1569,7 @@ setEditingId(null);
               fontSize: 11,
               borderRadius: 6,
               background: theme.card,
-              border: "1px solid #374151",
+              border: `1px solid ${theme.border}`,
               color: theme.subText
             }}
           >
@@ -1426,26 +1589,22 @@ setEditingId(null);
       }}>
 
         <div style={{
-          background: dark
-  ? "linear-gradient(135deg, #0f172a, #020617)"
-  : theme.card,
+          background: theme.card,
           padding: 18,
           borderRadius: 12,
           border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: "#93c5fd" }}>🎯 FIRE Target</p>
+          <p style={{ fontSize: 12, color: theme.subText }}>🎯 FIRE Target</p>
           <h2>₹{futureValue.toLocaleString()}</h2>
         </div>
 
         <div style={{
-          background: dark
-  ? "linear-gradient(135deg, #0f172a, #020617)"
-  : theme.card,
+          background: theme.card,
           padding: 18,
           borderRadius: 12,
           border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: "#6ee7b7" }}>💸 Monthly SIP Needed</p>
+          <p style={{ fontSize: 12, color: theme.subText }}>💸 Monthly SIP Needed</p>
           <h2>₹{requiredSip.toLocaleString()}</h2>
         </div>
 
@@ -1468,7 +1627,7 @@ setEditingId(null);
           }}>
             <div style={{
               width: `${progress}%`,
-              background: theme.card,
+              background: "#3b82f6",
               height: "100%",
               borderRadius: 6,
               transition: "width 0.4s ease"
@@ -1543,7 +1702,7 @@ setEditingId(null);
               }}>
                 <div style={{
                   width: `${pct}%`,
-                  background: theme.card,
+                  background: "#3b82f6",
                   height: "100%"
                 }} />
               </div>

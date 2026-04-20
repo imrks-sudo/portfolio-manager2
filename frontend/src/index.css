@@ -42,15 +42,22 @@ body {
   cursor: pointer;
   font-size: 13px;
   transition: 0.2s;
+  padding: 6px 8px;
+  border-radius: 6px;
 }
 
 .sidebar p:hover {
   color: #111827;
   transform: translateX(3px);
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .app.dark .sidebar p:hover {
   color: #60a5fa;
+}
+
+.app.dark .sidebar p {
+  color: #9ca3af;
 }
 
 /* ================= MAIN ================= */
@@ -61,15 +68,17 @@ body {
 
 /* ================= CARDS ================= */
 .card {
-  background: #0b1220;   /* solid dark */
+  background: #ffffff;
   border-radius: 12px;
   padding: 16px;
-  border: 1px solid #1f2937;
+  border: 1px solid #e5e7eb;
+  color: #111827;
 }
 
 .app.dark .card {
   background: #020617;
   border-color: #1f2937;
+  color: #e5e7eb;
 }
 
 .card:hover {
@@ -184,6 +193,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   border-top: 1px solid #e5e7eb;
   font-size: 13px;
   white-space: nowrap;
+  color: #111827;
 }
 
 .app.dark .table td {
