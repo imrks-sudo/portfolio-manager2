@@ -1763,10 +1763,16 @@ color: dark ? "#e5e7eb" : "#111827",
       </h3>
       <ul style={{ paddingLeft: 18 }}>
         <li>
-          Uploading a CSV will <b>overwrite your current portfolio</b>.
+          Uploading a CSV will <b>reset current price to 0. </b>.
         </li>
         <li>
           Stocks missing in the CSV will be <b>removed</b>.
+        </li>
+         <li>
+          Stocks updated in the CSV will be <b>updated</b>.
+        </li>
+        <li>
+          After uploading view the preview to see the <b>updated/ deleted or same</b> holdings.
         </li>
         <li>
           You can manually add/delete holdings using <b>Add Holding</b>.
