@@ -11,6 +11,8 @@ if (import.meta.env.DEV) {
   console.log("API URL:", import.meta.env.VITE_API_URL);
 }
 
+console.log("API KEY:", import.meta.env.VITE_API_KEY);
+
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
