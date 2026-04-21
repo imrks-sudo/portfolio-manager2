@@ -1283,16 +1283,29 @@ color: dark ? "#e5e7eb" : "#111827",
 
         <td>{d.currentPrice?.toFixed(2)}</td>
         <td>{d.currentValue?.toFixed(0)}</td>
+        
         <td className={d.pnl > 0 ? "green" : d.pnl < 0 ? "red" : ""}>
-  {d.pnl > 0 ? "▲" : d.pnl < 0 ? "▼" : ""}
-  ₹{d.pnl?.toFixed(0)}
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+    ₹{d.pnl?.toFixed(0)}
+    {d.pnl !== 0 && (
+      <span style={{ fontSize: 12 }}>
+        {d.pnl > 0 ? "▲" : "▼"}
+      </span>
+    )}
+  </span>
 </td>
 
 <td className={d.pnlPct > 0 ? "green" : d.pnlPct < 0 ? "red" : ""}>
-  {d.pnlPct > 0 ? "▲" : d.pnlPct < 0 ? "▼" : ""}
-  {isNaN(d.pnlPct)
-    ? "0.00%"
-    : Number(d.pnlPct).toFixed(2) + "%"}
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+    {isNaN(d.pnlPct)
+      ? "0.00%"
+      : Number(d.pnlPct).toFixed(2) + "%"}
+    {d.pnlPct !== 0 && (
+      <span style={{ fontSize: 12 }}>
+        {d.pnlPct > 0 ? "▲" : "▼"}
+      </span>
+    )}
+  </span>
 </td>
 
         <td>
