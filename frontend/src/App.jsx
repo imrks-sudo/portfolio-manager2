@@ -1779,10 +1779,7 @@ color: dark ? "#e5e7eb" : "#111827",
           Other brokers may differ.
         </li>
         <li>
-          Open the file and <b>Save As → CSV</b>.
-        </li>
-        <li>
-          Go to <b>Dashboard → Import CSV</b>.
+          Go to <b>Dashboard → Choose File</b>.
         </li>
         <li>
           Review the preview screen.
@@ -1810,16 +1807,16 @@ color: dark ? "#e5e7eb" : "#111827",
 
 <ul style={{ paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}>
   <li>
-    Uploading a CSV will <b>reset current prices to 0</b>.  
+    Uploading a new file will <b>reset current prices to 0</b>.  
     Click <b>Update Prices</b> after upload.
   </li>
 
   <li>
-    Holdings missing in the CSV will be <b>removed</b>.
+    Holdings missing in the file will be <b>removed</b>.
   </li>
 
   <li>
-    Existing holdings in the CSV will be <b>updated</b>.
+    Existing holdings in the file will be <b>updated</b>.
   </li>
 
   <li>
