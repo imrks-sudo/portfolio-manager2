@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 
 import {
   PieChart,
@@ -463,6 +464,111 @@ const mapRow = (row, headers) => {
   };
 };
 
+const handleDrop = (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files?.[0];
+  if (!file) return;
+
+  handleFileUpload({ target: { files: [file] } });
+};
+
+const handleDragOver = (e) => {
+  e.preventDefault();
+};
+
+// ✅ NEW: shared parser
+const handleParsedData = async (results) => {
+  try {
+    const rows = results.data;
+
+    console.log("Raw rows:", rows.slice(0, 10));
+
+    let headerIndex = -1;
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i].map((c) =>
+        (c || "").toString().toLowerCase()
+      );
+
+      if (
+        row.some((c) =>
+          c.includes("symbol") ||
+          c.includes("trading") ||
+          c.includes("instrument")
+        )
+      ) {
+        headerIndex = i;
+        break;
+      }
+    }
+
+    if (headerIndex === -1) {
+      alert("❌ Could not detect header row");
+      return;
+    }
+
+    const headers = rows[headerIndex];
+
+    console.log("Detected headers:", headers);
+
+    const normalize = (str) =>
+      (str || "").toLowerCase().replace(/[^a-z]/g, "");
+
+    const cleaned = rows
+      .slice(headerIndex + 1)
+      .map((row) => {
+        const obj = {};
+
+        headers.forEach((h, i) => {
+          obj[h] = row[i];
+        });
+
+        const keys = Object.keys(obj);
+
+        const get = (possible) => {
+          for (let p of possible) {
+            const found = keys.find((k) =>
+              normalize(k).includes(normalize(p))
+            );
+            if (found && obj[found]) return obj[found];
+          }
+          return null;
+        };
+
+        const symbol = get(["symbol", "tradingsymbol", "instrument"]);
+        const qty = get(["qty", "quantity"]);
+        const avg = get(["avgcost", "averageprice", "cost"]);
+        const sector = get(["sector"]);
+
+        if (!symbol) return null;
+
+        return {
+          symbol: String(symbol).trim(),
+          quantity:
+            Number(String(qty || "0").replace(/,/g, "")) || 0,
+          avgPrice:
+            Number(String(avg || "0").replace(/,/g, "")) || 0,
+          sector: String(sector || "").trim(),
+        };
+      })
+      .filter((x) => x && x.symbol);
+
+    console.log("✅ Cleaned:", cleaned);
+
+    if (!cleaned.length) {
+      alert("⚠️ No valid holdings found in file");
+      return;
+    }
+
+    setPreviewData(cleaned);
+    setShowPreview(true);
+
+  } catch (err) {
+    console.error("❌ Upload failed:", err);
+    alert("❌ Upload failed. Check console.");
+  }
+};
+
 const handleFileUpload = (e) => {
   console.log("📂 File upload triggered");
 
@@ -472,105 +578,43 @@ const handleFileUpload = (e) => {
     return;
   }
 
-  Papa.parse(file, {
-    header: false, // 🔥 IMPORTANT CHANGE
-    skipEmptyLines: true,
+  const isCSV = file.name.toLowerCase().endsWith(".csv");
 
-    complete: async function (results) {
-      try {
-        const rows = results.data;
+  // ================= CSV =================
+  if (isCSV) {
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: handleParsedData,
+    });
+    return;
+  }
 
-        console.log("Raw rows:", rows.slice(0, 10));
+  // ================= EXCEL =================
+  const reader = new FileReader();
 
-        // 🔍 FIND HEADER ROW
-        let headerIndex = -1;
+  reader.onload = (evt) => {
+    try {
+      const data = new Uint8Array(evt.target.result);
 
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i].map((c) =>
-            (c || "").toString().toLowerCase()
-          );
+      const workbook = XLSX.read(data, { type: "array" });
 
-          if (
-            row.some((c) =>
-              c.includes("symbol") ||
-              c.includes("trading") ||
-              c.includes("instrument")
-            )
-          ) {
-            headerIndex = i;
-            break;
-          }
-        }
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-        if (headerIndex === -1) {
-          alert("❌ Could not detect header row");
-          return;
-        }
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+      });
 
-        const headers = rows[headerIndex];
+      handleParsedData({ data: rows });
 
-        console.log("Detected headers:", headers);
+    } catch (err) {
+      console.error("❌ Excel parse failed:", err);
+      alert("❌ Failed to read Excel file");
+    }
+  };
 
-        // 🔧 NORMALIZE
-        const normalize = (str) =>
-          (str || "").toLowerCase().replace(/[^a-z]/g, "");
-
-        // 🔄 MAP ROWS
-        const cleaned = rows
-          .slice(headerIndex + 1)
-          .map((row) => {
-            const obj = {};
-
-            headers.forEach((h, i) => {
-              obj[h] = row[i];
-            });
-
-            const keys = Object.keys(obj);
-
-            const get = (possible) => {
-              for (let p of possible) {
-                const found = keys.find((k) =>
-                  normalize(k).includes(normalize(p))
-                );
-                if (found && obj[found]) return obj[found];
-              }
-              return null;
-            };
-
-            const symbol = get(["symbol", "tradingsymbol", "instrument"]);
-            const qty = get(["qty", "quantity"]);
-            const avg = get(["avgcost", "averageprice", "cost"]);
-            const sector = get(["sector"]);
-
-            if (!symbol) return null;
-
-            return {
-              symbol: String(symbol).trim(),
-              quantity:
-                Number(String(qty || "0").replace(/,/g, "")) || 0,
-              avgPrice:
-                Number(String(avg || "0").replace(/,/g, "")) || 0,
-              sector: String(sector || "").trim(),
-            };
-          })
-          .filter((x) => x && x.symbol);
-
-        console.log("✅ Cleaned:", cleaned);
-
-        if (!cleaned.length) {
-          alert("⚠️ No valid holdings found in file");
-          return;
-        }
-
-        setPreviewData(cleaned);
-setShowPreview(true);
-
-      } catch (err) {
-        console.error("❌ Upload failed:", err);
-        alert("❌ Upload failed. Check console.");
-      }
-    },
-  });
+  reader.readAsArrayBuffer(file);
 };
 
   const chartData = data.map((d) => ({
@@ -897,20 +941,21 @@ color: dark ? "#e5e7eb" : "#111827",
 
         {/* CSV UPLOAD */}
       <div
+  onDrop={handleDrop}
+  onDragOver={handleDragOver}
   style={{
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
     background: theme.card,
-    padding: "8px 12px",
+    padding: "12px",
     borderRadius: 8,
-    border: `1px solid ${theme.border}`,
+    border: `2px dashed ${theme.border}`,
+    cursor: "pointer",
+    minWidth: 180
   }}
 >
-  <span style={{ fontSize: 12, color: theme.subText }}>
-    Import CSV
-  </span>
-
   <label
     style={{
       fontSize: 12,
@@ -925,6 +970,7 @@ color: dark ? "#e5e7eb" : "#111827",
     Choose File
     <input
       type="file"
+      accept=".csv, .xls, .xlsx"
       onChange={handleFileUpload}
       style={{ display: "none" }}
     />
