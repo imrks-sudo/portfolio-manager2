@@ -1772,10 +1772,10 @@ color: dark ? "#e5e7eb" : "#111827",
       </h3>
       <ol style={{ paddingLeft: 18 }}>
         <li>
-          Download holdings file (XLS) from your broker (e.g. Zerodha).
+          Download holdings file from your broker (e.g. Zerodha).
         </li>
         <li>
-          For Zerodha: keep only the <b>combined sheet</b> (delete stocks/MF sheets).
+          For Zerodha: If you're downloading the combined holdings file, keep only the <b>combined sheet</b> (delete stocks/MF sheets).
           Other brokers may differ.
         </li>
         <li>
