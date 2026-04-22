@@ -310,6 +310,19 @@ data.forEach((d) => {
   }
 });
 
+const totalToday = data.reduce((sum, d) => sum + (d.dailyChange || 0), 0);
+
+const todayPct =
+  totalValue > 0 ? (totalToday / (totalValue - totalToday)) * 100 : 0;
+
+// Sort for gainers/losers
+const sorted = [...data].sort(
+  (a, b) => (b.dailyPct || 0) - (a.dailyPct || 0)
+);
+
+const topGainer = sorted[0];
+const topLoser = sorted[sorted.length - 1];
+
   // FIRE CALC
   useEffect(() => {
     const r = rate / 100;
@@ -810,12 +823,86 @@ color: "#fff",
 >
         <h2>Portfolio Management</h2>
 
-        <p onClick={() => setView("dashboard")}>🏠 Dashboard</p>
-        <p onClick={() => setView("analytics")}>📊 Analytics</p>
-        <p onClick={() => setView("insights")}>💡 Insights</p>
-        <p onClick={() => setView("help")}>❓ Help</p>
-        <p onClick={() => setView("about")}>ℹ️ About</p>
-        <p onClick={() => setView("support")}>❤️ Support</p>
+        <p
+  onClick={() => setView("dashboard")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "dashboard" ? "#2563eb" : "transparent",
+    color: view === "dashboard" ? "#fff" : theme.text,
+  }}
+>
+  🏠 Dashboard
+</p>
+
+
+<p
+  onClick={() => setView("analytics")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "analytics" ? "#2563eb" : "transparent",
+    color: view === "analytics" ? "#fff" : theme.text,
+  }}
+>
+  📊 Analytics
+</p>
+
+
+<p
+  onClick={() => setView("insights")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "insights" ? "#2563eb" : "transparent",
+    color: view === "insights" ? "#fff" : theme.text,
+  }}
+>
+  💡 Insights
+</p>
+
+<p
+  onClick={() => setView("help")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "help" ? "#2563eb" : "transparent",
+    color: view === "help" ? "#fff" : theme.text,
+  }}
+>
+  ❓ Help
+</p>
+
+
+<p
+  onClick={() => setView("about")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "about" ? "#2563eb" : "transparent",
+    color: view === "about" ? "#fff" : theme.text,
+  }}
+>
+  ℹ️ About
+</p>
+
+<p
+  onClick={() => setView("support")}
+  style={{
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "support" ? "#2563eb" : "transparent",
+    color: view === "support" ? "#fff" : theme.text,
+  }}
+>
+  ❤️ Support
+</p>
 
         <button
   onClick={() => setDark(prev => !prev)}
@@ -916,7 +1003,16 @@ color: dark ? "#e5e7eb" : "#111827",
         {/* DASHBOARD */}
         {view === "dashboard" && (
   <>
-    <h1 style={{ marginBottom: 16 }}>Portfolio Overview</h1>
+    <h1 style={{ marginBottom: 12, fontWeight: 600 }}>Portfolio Overview</h1>
+
+    <div
+  style={{
+    height: 1,
+    background: theme.border,
+    marginBottom: 16,
+    opacity: 0.5
+  }}
+/>
 
      {/* ✅ EMPTY STATE MESSAGE */}
     {data.length === 0 && (
@@ -926,82 +1022,84 @@ color: dark ? "#e5e7eb" : "#111827",
     )}
 
     {/* 🔷 TOP BAR */}
-    <div className="card" style={{ marginBottom: 20, padding: 16 }}>
-
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: 12,
-        width: "100%"
-      }}>
-
-      
-
-        {/* CSV UPLOAD */}
-      <div
-  onDrop={handleDrop}
-  onDragOver={handleDragOver}
+    <div
   style={{
     display: "flex",
-    flexDirection: "column",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 6,
-    background: theme.card,
-    padding: "12px",
-    borderRadius: 8,
-    border: `2px dashed ${theme.border}`,
-    cursor: "pointer",
-    minWidth: 180
+    marginBottom: 16,
+    flexWrap: "wrap",
+    gap: 12
   }}
 >
-  <label
+  {/* LEFT */}
+  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+
+    {/* CSV UPLOAD */}
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 6,
+        background: theme.card,
+        padding: "12px",
+        borderRadius: 8,
+        border: `2px dashed ${theme.border}`,
+        cursor: "pointer",
+        minWidth: 180
+      }}
+    >
+      <label
+        style={{
+          fontSize: 12,
+          color: "#3b82f6",
+          cursor: "pointer",
+          padding: "4px 8px",
+          borderRadius: 6,
+          border: `1px solid ${theme.border}`,
+          background: theme.bg,
+        }}
+      >
+        Choose File
+        <input
+          type="file"
+          accept=".csv, .xls, .xlsx"
+          onChange={handleFileUpload}
+          style={{ display: "none" }}
+        />
+      </label>
+    </div>
+
+  </div>
+
+  {/* RIGHT */}
+  <button
+    onClick={handleUpdatePrices}
+    disabled={updatingPrices}
     style={{
-      fontSize: 12,
-      color: "#3b82f6",
-      cursor: "pointer",
-      padding: "4px 8px",
-      borderRadius: 6,
-      border: `1px solid ${theme.border}`,
-      background: theme.bg,
+      padding: "8px 14px",
+      borderRadius: 8,
+      background: updatingPrices ? "#1e293b" : "#2563eb",
+      boxShadow: updatingPrices ? "none" : "0 2px 6px rgba(37,99,235,0.3)",
+      border: "none",
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: 500,
+      cursor: updatingPrices ? "not-allowed" : "pointer",
+      opacity: updatingPrices ? 0.7 : 1,
     }}
   >
-    Choose File
-    <input
-      type="file"
-      accept=".csv, .xls, .xlsx"
-      onChange={handleFileUpload}
-      style={{ display: "none" }}
-    />
-  </label>
+    {updatingPrices ? "⏳ Updating..." : "🔄 Update Prices"}
+  </button>
 </div>
-
-        {/* UPDATE BUTTON */}
-        <button
-  onClick={handleUpdatePrices}
-  disabled={updatingPrices}
-  style={{
-    padding: "8px 14px",
-    borderRadius: 8,
-    background: updatingPrices ? "#1e3a8a" : "#3b82f6",
-    border: "none",
-    color: "#fff",
-    fontSize: 13,
-    cursor: updatingPrices ? "not-allowed" : "pointer",
-    opacity: updatingPrices ? 0.7 : 1,
-    transition: "all 0.2s ease"
-  }}
->
-  {updatingPrices ? "⏳ Updating..." : "🔄 Update Prices"}
-</button>
-
-      </div>
-    </div>
 
     {/* 🔶 PREVIEW PANEL */}
     {showPreview && (
-      <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+  <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+
         <h3 style={{ color: theme.text }}>
           📄 Preview Upload ({previewData.length} items)
         </h3>
@@ -1023,14 +1121,14 @@ color: dark ? "#e5e7eb" : "#111827",
         <div style={{ maxHeight: 350, overflowY: "auto", overflowX: "auto" }}>
         <table className="table" style={{ minWidth: 700 }}>
             <thead>
-              <tr>
-                <th>Status</th>
-                <th>Symbol</th>
-                <th>Qty</th>
-                <th>Avg Price</th>
-                <th>Sector</th>
-              </tr>
-            </thead>
+  <tr>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Status</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Symbol</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Qty</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Avg Price</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Sector</th>
+  </tr>
+</thead>
 
             <tbody>
               {diffData.map((row, i) => (
@@ -1090,134 +1188,313 @@ color: dark ? "#e5e7eb" : "#111827",
       </div>
     )}
 
-    {/* 🔷 KPI CARDS */}
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-      gap: 14,
-      marginBottom: 20
-    }}>
-      <div
-  className="card"
-  style={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`
-  }}
->
-        <h3 style={{ color: theme.text }}>Investment</h3>
-        <p>₹{totalInvestment.toLocaleString()}</p>
-      </div>
-
-      <div
-  className="card"
-  style={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`
-  }}
->
-        <h3 style={{ color: theme.text }}>Value</h3>
-        <p>₹{totalValue.toLocaleString()}</p>
-      </div>
-
-      <div
-  className="card"
-  style={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`
-  }}
->
-        <h3 style={{ color: theme.text }}>P&L</h3>
-        <p className={totalPnL > 0 ? "green" : "red"}>
-          ₹{totalPnL.toLocaleString()}
-        </p>
-      </div>
-
-      <div
-  className="card"
-  style={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`
-  }}
->
-        <h3 style={{ color: theme.text }}>P&L (%)</h3>
-        <p className={totalPnLPct > 0 ? "green" : "red"}>
-          {totalPnLPct.toFixed(2)}%
-        </p>
-      </div>
-    </div>
-
-            {/* ADD HOLDING */}
-            <div className="card" style={{ marginTop: 20 }}>
-              <h3 style={{ color: theme.text }}>Add Holding</h3>
-              <div
+{/* 🔶 TODAY + TOP MOVERS */}
+<div
   style={{
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: 10
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 14,
+    marginBottom: 16,
   }}
 >
-                <input placeholder="Symbol" value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} />
-                <input placeholder="Quantity" type="number" style={{ width: "80px" }} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
-                <input placeholder="Avg Price" type="number" style={{ width: "80px" }} value={form.avgPrice} onChange={(e) => setForm({ ...form, avgPrice: e.target.value })} />
-                <input placeholder="Sector" value={form.sector} onChange={(e) => setForm({ ...form, sector: e.target.value })} />
+  {/* TODAY CARD */}
+  <div
+    className="card"
+    style={{
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      padding: 16,
+      borderRadius: 14,
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>Today</h3>
 
-              <button
-  onClick={async () => {
-    if (!form.symbol || !form.quantity || !form.avgPrice) return;
+    <p
+      className={
+        totalToday > 0 ? "green" : totalToday < 0 ? "red" : ""
+      }
+      style={{ fontSize: 18, fontWeight: 600 }}
+    >
+      ₹{totalToday.toLocaleString()}{" "}
+      {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
+    </p>
 
-    const newItem = {
-      symbol: form.symbol.trim().toUpperCase(),
-      quantity: Number(form.quantity),
-      avgPrice: Number(form.avgPrice),
-      sector: form.sector || "Others",
-    };
+    <span style={{ fontSize: 12, opacity: 0.8 }}>
+  {todayPct.toFixed(2)}%
+</span>
 
-    const exists = data.find(
-      (item) => item.symbol === newItem.symbol
-    );
+<span style={{ fontSize: 11, opacity: 0.6, display: "block", marginTop: 4 }}>
+  Updated just now
+</span>
+  </div>
 
-    let updated;
+  {/* TOP GAINER */}
+  {topGainer && (
+    <div
+      className="card"
+      style={{
+        background: theme.card,
+        border: `1px solid ${theme.border}`,
+        padding: 16,
+        borderRadius: 14,
+      }}
+    >
+      <h3 style={{ color: theme.subText }}>Top Gainer</h3>
 
-    if (exists) {
-      updated = data.map((item) =>
-        item.symbol === newItem.symbol
-          ? {
-              ...item,
-              quantity: item.quantity + newItem.quantity,
-              avgPrice: newItem.avgPrice,
-            }
-          : item
-      );
-    } else {
-      updated = [...data, newItem];
-    }
+      <p style={{ fontWeight: 600 }}>
+        {topGainer.symbol}
+      </p>
 
-    setData(updated);
-    saveLocalPortfolio(updated);
-    refreshProfiles();
+      <span className="green" style={{ fontSize: 12 }}>
+        ₹{topGainer.dailyChange?.toFixed(0)} ▲ (
+        {topGainer.dailyPct?.toFixed(2)}%)
+      </span>
+    </div>
+  )}
 
-    setForm({
-      symbol: "",
-      quantity: "",
-      avgPrice: "",
-      sector: "",
-    });
-  }}
+  {/* TOP LOSER */}
+  {topLoser && (
+    <div
+      className="card"
+      style={{
+        background: theme.card,
+        border: `1px solid ${theme.border}`,
+        padding: 16,
+        borderRadius: 14,
+      }}
+    >
+      <h3 style={{ color: theme.subText }}>Top Loser</h3>
+
+      <p style={{ fontWeight: 600 }}>
+        {topLoser.symbol}
+      </p>
+
+      <span className="red" style={{ fontSize: 12 }}>
+        ₹{topLoser.dailyChange?.toFixed(0)} ▼ (
+        {topLoser.dailyPct?.toFixed(2)}%)
+      </span>
+    </div>
+  )}
+</div>
+
+    {/* 🔷 KPI CARDS */}
+<div
   style={{
-    padding: "6px 12px",
-    borderRadius: 6,
-    background: "#3b82f6",
-    border: "none",
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: 13,
-    transition: "all 0.2s ease"
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 14,
+    marginBottom: 20,
   }}
 >
-  ➕ Add
-</button> 
-              </div>
-            </div>
+  {/* Investment */}
+  <div
+    className="card"
+    style={{
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      padding: 18,
+      borderRadius: 14,
+      transition: "all 0.2s ease",
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>Investment</h3>
+    <p style={{ fontSize: 18, fontWeight: 600 }}>
+      ₹
+      {totalInvestment.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      })}
+    </p>
+  </div>
+
+  {/* Value */}
+  <div
+    className="card"
+    style={{
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      padding: 18,
+      borderRadius: 14,
+      transition: "all 0.2s ease",
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>Value</h3>
+    <p style={{ fontSize: 18, fontWeight: 600 }}>
+      ₹{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+    </p>
+  </div>
+
+  {/* P&L */}
+  <div
+    className="card"
+    style={{
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      padding: 18,
+      borderRadius: 14,
+      transition: "all 0.2s ease",
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>P&L</h3>
+    <p
+      className={totalPnL > 0 ? "green" : totalPnL < 0 ? "red" : ""}
+      style={{ fontSize: 18, fontWeight: 600 }}
+    >
+      ₹{totalPnL.toLocaleString()} {totalPnL > 0 ? "▲" : totalPnL < 0 ? "▼" : ""}
+    </p>
+  </div>
+
+  {/* P&L % */}
+  <div
+    className="card"
+    style={{
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      padding: 18,
+      borderRadius: 14,
+      transition: "all 0.2s ease",
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>P&L (%)</h3>
+    <p
+      className={totalPnLPct > 0 ? "green" : totalPnLPct < 0 ? "red" : ""}
+      style={{ fontSize: 18, fontWeight: 600 }}
+    >
+      {totalPnLPct.toFixed(2)}%{" "}
+      {totalPnLPct > 0 ? "▲" : totalPnLPct < 0 ? "▼" : ""}
+    </p>
+  </div>
+</div>
+
+
+{/* ADD HOLDING */}
+<div className="card" style={{ marginTop: 20, padding: 16 }}>
+  <h3 style={{ color: theme.text, marginBottom: 10 }}>Add Holding</h3>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+      gap: 10,
+      alignItems: "center",
+    }}
+  >
+    <input
+      placeholder="Symbol"
+      value={form.symbol}
+      onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 13,
+      }}
+    />
+
+    <input
+      placeholder="Quantity"
+      type="number"
+      value={form.quantity}
+      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 13,
+      }}
+    />
+
+    <input
+      placeholder="Avg Price"
+      type="number"
+      value={form.avgPrice}
+      onChange={(e) => setForm({ ...form, avgPrice: e.target.value })}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 13,
+      }}
+    />
+
+    <input
+      placeholder="Sector"
+      value={form.sector}
+      onChange={(e) => setForm({ ...form, sector: e.target.value })}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 13,
+      }}
+    />
+
+    {/* ADD BUTTON */}
+    <button
+      onClick={async () => {
+        if (!form.symbol || !form.quantity || !form.avgPrice) return;
+
+        const newItem = {
+          symbol: form.symbol.trim().toUpperCase(),
+          quantity: Number(form.quantity),
+          avgPrice: Number(form.avgPrice),
+          sector: form.sector || "Others",
+        };
+
+        const exists = data.find(
+          (item) => item.symbol === newItem.symbol
+        );
+
+        let updated;
+
+        if (exists) {
+          updated = data.map((item) =>
+            item.symbol === newItem.symbol
+              ? {
+                  ...item,
+                  quantity: item.quantity + newItem.quantity,
+                  avgPrice: newItem.avgPrice,
+                }
+              : item
+          );
+        } else {
+          updated = [...data, newItem];
+        }
+
+        setData(updated);
+        saveLocalPortfolio(updated);
+        refreshProfiles();
+
+        setForm({
+          symbol: "",
+          quantity: "",
+          avgPrice: "",
+          sector: "",
+        });
+      }}
+      style={{
+        padding: "8px 12px",
+        borderRadius: 8,
+        background: "#2563eb",
+        border: "none",
+        color: "#fff",
+        cursor: "pointer",
+        fontSize: 13,
+        fontWeight: 500,
+        height: "36px",
+      }}
+    >
+      ➕ Add
+    </button>
+  </div>
+</div>
 
             {/* TABLE */}
             <div style={{ overflowX: "auto" }}>
@@ -1225,7 +1502,6 @@ color: dark ? "#e5e7eb" : "#111827",
   className="table"
   style={{
     minWidth: 900,
-    borderCollapse: "collapse"
   }}
 >
               <thead>
@@ -1247,7 +1523,7 @@ color: dark ? "#e5e7eb" : "#111827",
     const isEditing = editingId === d.symbol;
 
     return (
-      <tr key={d.symbol}>
+      <tr key={d.symbol} style={{ borderRadius: 10 }}>
         <td>{d.symbol}</td>
         <td>{d.sector}</td>
 
@@ -1346,14 +1622,14 @@ color: dark ? "#e5e7eb" : "#111827",
                 <button
                   onClick={() => setEditingId(null)}
                   style={{
-                    padding: "4px 6px",
-                    borderRadius: 4,
-                    background: "#ef4444",
-                    border: "none",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
+  padding: "4px 8px",
+  borderRadius: 6,
+  background: dark ? "#1f2937" : "#f3f4f6",
+  border: "none",
+  color: theme.text,
+  cursor: "pointer",
+  fontSize: 12,
+}}
                   title="Cancel"
                 >
                   ❌
@@ -1370,14 +1646,14 @@ color: dark ? "#e5e7eb" : "#111827",
                     });
                   }}
                   style={{
-                    padding: "4px 6px",
-                    borderRadius: 4,
-                    background: "transparent",
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
+  padding: "4px 8px",
+  borderRadius: 6,
+  background: dark ? "#1f2937" : "#f3f4f6",
+  border: "none",
+  color: theme.text,
+  cursor: "pointer",
+  fontSize: 12,
+}}
                   title="Edit"
                 >
                   ✏️
@@ -1396,14 +1672,14 @@ color: dark ? "#e5e7eb" : "#111827",
                     refreshProfiles();
                   }}
                   style={{
-                    padding: "4px 6px",
-                    borderRadius: 4,
-                    background: "transparent",
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
+  padding: "4px 8px",
+  borderRadius: 6,
+  background: dark ? "#1f2937" : "#f3f4f6",
+  border: "none",
+  color: theme.text,
+  cursor: "pointer",
+  fontSize: 12,
+}}
                   title="Delete"
                 >
                   🗑
@@ -1777,7 +2053,7 @@ color: dark ? "#e5e7eb" : "#111827",
 )}
 
 {view === "help" && (
-  <div className="card" style={{ padding: 20 }}>
+  <div className="card" style={{ padding: 12 }}>
     <h2 style={{ marginBottom: 12 }}>❓ How to Use</h2>
 
     <div style={{ marginTop: 12, lineHeight: 1.7, fontSize: 13 }}>
@@ -1857,7 +2133,7 @@ color: dark ? "#e5e7eb" : "#111827",
 )}
 
 {view === "about" && (
-  <div className="card" style={{ padding: 20 }}>
+  <div className="card" style={{ padding: 12 }}>
     <h2 style={{ marginBottom: 12 }}>ℹ️ About This Project</h2>
 
     <p style={{ marginTop: 12, lineHeight: 1.7, fontSize: 13 }}>
@@ -1909,7 +2185,7 @@ color: dark ? "#e5e7eb" : "#111827",
 )}
 
 {view === "support" && (
-  <div className="card" style={{ padding: 20 }}>
+  <div className="card" style={{ padding: 12 }}>
     <h2 style={{ marginBottom: 12 }}>❤️ Support This Project</h2>
 
     <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.7 }}>

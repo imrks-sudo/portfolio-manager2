@@ -1,3 +1,7 @@
+* {
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
 /* ================= BASE ================= */
 body {
   margin: 0;
@@ -169,39 +173,27 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .table {
   width: 100%;
   margin-top: 16px;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+
+.table tr {
+  background: white;
   border-radius: 10px;
-  overflow: hidden;
+}
+
+.app.dark .table tr {
+  background: #020617;
+}
+
+.table td, .table th {
+  padding: 10px;
 }
 
 .table th {
-  text-align: left;
-  padding: 8px;
   font-size: 11px;
   color: #6b7280;
-  background: #f1f5f9;
-  white-space: nowrap;
-}
-
-.app.dark .table th {
-  background: #020617;
-  color: #9ca3af;
-}
-
-.table td {
-  padding: 8px;
-  text-align: left;
-  border-top: 1px solid #e5e7eb;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.app.dark .table td {
-  border-color: #1f2937;
-}
-
-.table tr:hover {
-  background: rgba(59, 130, 246, 0.05);
+  background: transparent;
 }
 
 /* ================= INPUTS ================= */
