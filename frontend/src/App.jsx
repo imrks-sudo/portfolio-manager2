@@ -310,19 +310,6 @@ data.forEach((d) => {
   }
 });
 
-const totalToday = data.reduce((sum, d) => sum + (d.dailyChange || 0), 0);
-
-const todayPct =
-  totalValue > 0 ? (totalToday / (totalValue - totalToday)) * 100 : 0;
-
-// Sort for gainers/losers
-const sorted = [...data].sort(
-  (a, b) => (b.dailyPct || 0) - (a.dailyPct || 0)
-);
-
-const topGainer = sorted[0];
-const topLoser = sorted[sorted.length - 1];
-
   // FIRE CALC
   useEffect(() => {
     const r = rate / 100;
@@ -1188,94 +1175,7 @@ color: dark ? "#e5e7eb" : "#111827",
       </div>
     )}
 
-{/* 🔶 TODAY + TOP MOVERS */}
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 14,
-    marginBottom: 16,
-  }}
->
-  {/* TODAY CARD */}
-  <div
-    className="card"
-    style={{
-      background: theme.card,
-      border: `1px solid ${theme.border}`,
-      padding: 16,
-      borderRadius: 14,
-    }}
-  >
-    <h3 style={{ color: theme.subText }}>Today</h3>
 
-    <p
-      className={
-        totalToday > 0 ? "green" : totalToday < 0 ? "red" : ""
-      }
-      style={{ fontSize: 18, fontWeight: 600 }}
-    >
-      ₹{totalToday.toLocaleString()}{" "}
-      {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
-    </p>
-
-    <span style={{ fontSize: 12, opacity: 0.8 }}>
-  {todayPct.toFixed(2)}%
-</span>
-
-<span style={{ fontSize: 11, opacity: 0.6, display: "block", marginTop: 4 }}>
-  Updated just now
-</span>
-  </div>
-
-  {/* TOP GAINER */}
-  {topGainer && (
-    <div
-      className="card"
-      style={{
-        background: theme.card,
-        border: `1px solid ${theme.border}`,
-        padding: 16,
-        borderRadius: 14,
-      }}
-    >
-      <h3 style={{ color: theme.subText }}>Top Gainer</h3>
-
-      <p style={{ fontWeight: 600 }}>
-        {topGainer.symbol}
-      </p>
-
-      <span className="green" style={{ fontSize: 12 }}>
-        ₹{topGainer.dailyChange?.toFixed(0)} ▲ (
-        {topGainer.dailyPct?.toFixed(2)}%)
-      </span>
-    </div>
-  )}
-
-  {/* TOP LOSER */}
-  {topLoser && (
-    <div
-      className="card"
-      style={{
-        background: theme.card,
-        border: `1px solid ${theme.border}`,
-        padding: 16,
-        borderRadius: 14,
-      }}
-    >
-      <h3 style={{ color: theme.subText }}>Top Loser</h3>
-
-      <p style={{ fontWeight: 600 }}>
-        {topLoser.symbol}
-      </p>
-
-      <span className="red" style={{ fontSize: 12 }}>
-        ₹{topLoser.dailyChange?.toFixed(0)} ▼ (
-        {topLoser.dailyPct?.toFixed(2)}%)
-      </span>
-    </div>
-  )}
-</div>
 
     {/* 🔷 KPI CARDS */}
 <div
