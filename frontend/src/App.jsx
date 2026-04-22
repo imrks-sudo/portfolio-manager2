@@ -1175,8 +1175,7 @@ color: dark ? "#e5e7eb" : "#111827",
       </div>
     )}
 
-
-
+    {/* 🔷 KPI CARDS */}
     {/* 🔷 KPI CARDS */}
 <div
   style={{
@@ -1264,7 +1263,6 @@ color: dark ? "#e5e7eb" : "#111827",
     </p>
   </div>
 </div>
-
 
 {/* ADD HOLDING */}
 <div className="card" style={{ marginTop: 20, padding: 16 }}>
