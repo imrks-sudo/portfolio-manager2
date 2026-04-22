@@ -158,7 +158,7 @@ const getDiffData = () => {
   const diff = [];
 
   // NEW + UPDATED + SAME
-  previewcleanData.forEach((p) => {
+  previewData.forEach((p) => {
     const existing = currentMap.get(p.symbol);
 
     if (!existing) {
