@@ -399,39 +399,24 @@ const topLoser = sorted[sorted.length - 1];
 );
 
 const updated = data.map((item) => {
-  const prevPrices = new Map(
-  data.map(d => [d.symbol, d.currentPrice || 0])
-);
-
-const updated = data.map((item) => {
   const key = item.symbol.replace(/-E$|-GB$/i, "");
   const match = priceMap.get(key);
 
-  if (!match) return item;
+      if (!match) return item;
 
-  const currentPrice = Number(match.currentPrice || 0);
-  const prevPrice = prevPrices.get(item.symbol) || currentPrice;
+      const currentPrice = Number(match.currentPrice || 0);
+      const investment = Number(item.quantity) * Number(item.avgPrice);
+      const currentValue = Number(item.quantity) * currentPrice;
+      const pnl = currentValue - investment;
+      const pnlPct = investment > 0 ? (pnl / investment) * 100 : 0;
 
-  // 🔥 DAILY CALCULATION
-  const dailyChange = currentPrice - prevPrice;
-  const dailyPct =
-    prevPrice > 0 ? (dailyChange / prevPrice) * 100 : 0;
-
-  const investment = Number(item.quantity) * Number(item.avgPrice);
-  const currentValue = Number(item.quantity) * currentPrice;
-  const pnl = currentValue - investment;
-  const pnlPct = investment > 0 ? (pnl / investment) * 100 : 0;
-
-  return {
-    ...item,
-    currentPrice,
-    currentValue,
-    pnl,
-    pnlPct,
-    dailyChange,   // ✅ IMPORTANT
-    dailyPct       // ✅ IMPORTANT
-  };
-});
+      return {
+        ...item,
+        currentPrice,
+        currentValue,
+        pnl,
+        pnlPct,
+      };
     });
 
     setData(updated);
