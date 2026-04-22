@@ -75,6 +75,7 @@ const formatPercent = (value, total) =>
 function App() {
   const [profile, setProfile] = useState(getActiveProfile());
   const [data, setData] = useState([]);
+  const cleanData = data.filter(Boolean);
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const theme = {
@@ -126,7 +127,7 @@ const handleConfirmUpload = async () => {
     // ✅ MERGE INSTEAD OF REPLACE
     const map = new Map();
 
-    data.forEach(d => map.set(d.symbol, d));
+    cleanData.forEach(d => map.set(d.symbol, d));
     enriched.forEach(d => map.set(d.symbol, d));
 
     const merged = Array.from(map.values());
@@ -157,7 +158,7 @@ const getDiffData = () => {
   const diff = [];
 
   // NEW + UPDATED + SAME
-  previewData.forEach((p) => {
+  previewcleanData.forEach((p) => {
     const existing = currentMap.get(p.symbol);
 
     if (!existing) {
@@ -173,7 +174,7 @@ const getDiffData = () => {
   });
 
   // REMOVED
-  data.forEach((d) => {
+  cleanData.forEach((d) => {
     if (!previewMap.has(d.symbol)) {
       diff.push({
         symbol: d.symbol,
@@ -273,15 +274,17 @@ useEffect(() => {
   localStorage.setItem("darkMode", dark);
 }, [dark]);
 
-  const totalValue = data.reduce(
-  (s, d) => s + (Number(d.currentValue) || 0),
+  const totalValue = cleanData.reduce(
+  (s, d) => s + (Number(d?.currentValue) || 0),
   0
 );
-  const totalInvestment = data.reduce(
-  (s, d) => s + (Number(d.quantity) * Number(d.avgPrice)),
+
+const totalInvestment = cleanData.reduce(
+  (s, d) => s + ((Number(d?.quantity) || 0) * (Number(d?.avgPrice) || 0)),
   0
 );
-  const totalPnL = totalValue - totalInvestment;
+
+const totalPnL = totalValue - totalInvestment;
 
   const assetTotals = {
   stocks: 0,
@@ -295,7 +298,7 @@ const totalPnLPct =
     ? ((totalPnL / totalInvestment) * 100)
     : 0;
 
-data.forEach((d) => {
+cleanData.forEach((d) => {
   const value = d.currentValue || 0;
   const symbol = (d.symbol || "").toLowerCase();
 
@@ -623,7 +626,7 @@ const handleFileUpload = (e) => {
   }));
 
   const sectorMap = {};
-  data.forEach((d) => {
+  cleanData.forEach((d) => {
     if (!d.sector) return;
     sectorMap[d.sector] = (sectorMap[d.sector] || 0) + (d.currentValue || 0);
   });
@@ -663,7 +666,7 @@ const handleFileUpload = (e) => {
 
   const allocation = { stocks: 0, mf: 0, etf: 0, sgb: 0 };
 
-  data.forEach((h) => {
+  cleanData.forEach((h) => {
     const investment = h.quantity * h.avgPrice;
     const symbol = h.symbol.toLowerCase();
 
@@ -1417,7 +1420,7 @@ color: dark ? "#e5e7eb" : "#111827",
               </thead>
 
             <tbody>
-  {data.map((d) => {
+  {cleanData.map((d) => {
     const isEditing = editingId === d.symbol;
 
     return (
