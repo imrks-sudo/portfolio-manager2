@@ -1425,7 +1425,27 @@ color: dark ? "#e5e7eb" : "#111827",
 
     return (
       <tr key={d.symbol} style={{ borderRadius: 10 }}>
-        <td>{d.symbol}</td>
+        <td>
+  {isEditing ? (
+    <input
+      value={editForm.symbol}
+      onChange={(e) =>
+        setEditForm({ ...editForm, symbol: e.target.value.toUpperCase() })
+      }
+      style={{
+        padding: "6px 8px",
+        borderRadius: 6,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 12,
+        width: "90px",
+      }}
+    />
+  ) : (
+    d.symbol
+  )}
+</td>
         <td>{d.sector}</td>
 
         <td>
@@ -1491,15 +1511,29 @@ color: dark ? "#e5e7eb" : "#111827",
               <>
                 <button
                   onClick={async () => {
+                    const newSymbol = editForm.symbol.trim().toUpperCase();
+
+     // HERE (duplicate check)
+    if (
+      data.some(
+        (i) =>
+          i.symbol === newSymbol &&
+          i.symbol !== d.symbol
+      )
+    ) {
+      alert("Symbol already exists");
+      return;
+    }
                     const updated = data.map((item) =>
-                      item.symbol === d.symbol
-                        ? {
-                            ...item,
-                            quantity: Number(editForm.quantity),
-                            avgPrice: Number(editForm.avgPrice),
-                          }
-                        : item
-                    );
+  item.symbol === d.symbol
+    ? {
+        ...item,
+        symbol: editForm.symbol.trim().toUpperCase(), // ✅ NEW
+        quantity: Number(editForm.quantity),
+        avgPrice: Number(editForm.avgPrice),
+      }
+    : item
+);
 
                     setData(updated);
                     saveLocalPortfolio(updated);
@@ -1542,9 +1576,10 @@ color: dark ? "#e5e7eb" : "#111827",
                   onClick={() => {
                     setEditingId(d.symbol);
                     setEditForm({
-                      quantity: d.quantity,
-                      avgPrice: d.avgPrice,
-                    });
+  symbol: d.symbol,
+  quantity: d.quantity,
+  avgPrice: d.avgPrice,
+});
                   }}
                   style={{
   padding: "4px 8px",

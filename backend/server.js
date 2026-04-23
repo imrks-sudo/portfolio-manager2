@@ -8,7 +8,8 @@ const axios = require("axios");
 const app = express();
 app.use(cors({
   origin: [
-    "https://myportfoliomanager.vercel.app"
+    "http://localhost:5173",              // ✅ local Vite dev
+    "https://myportfoliomanager.vercel.app" // ✅ production
   ],
   methods: ["GET", "POST"],
 }));
