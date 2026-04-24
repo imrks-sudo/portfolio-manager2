@@ -92,6 +92,8 @@ app.post("/update-prices", async (req, res) => {
         // =========================
         // 🟣 MUTUAL FUND (SAME AS YOUR WORKING CODE)
         // =========================
+        let change = 0;
+        let pChange = 0;
         if (s.includes("fund") || s.includes("plan")) {
 
           const search = await axios.get(
@@ -180,6 +182,12 @@ try {
 
 price = Number(response.data?.priceInfo?.lastPrice) || 0;
 
+change =
+  Number(response.data?.priceInfo?.change) || 0;
+
+pChange =
+  Number(response.data?.priceInfo?.pChange) || 0;
+
           console.log(
   `%c${symbol} → ₹${price}`,
   "color: #22c55e; font-weight: bold;"
@@ -196,9 +204,11 @@ price = Number(response.data?.priceInfo?.lastPrice) || 0;
 
         // ✅ PUSH RESULT (instead of DB update)
         results.push({
-          symbol: symbolRaw,
-          currentPrice: price,
-        });
+  symbol: symbolRaw,
+  currentPrice: price,
+  change: change || 0,
+  pChange: pChange || 0,
+});
 
         successCount++;
 

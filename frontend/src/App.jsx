@@ -76,6 +76,7 @@ function App() {
   const [profile, setProfile] = useState(getActiveProfile());
   const [data, setData] = useState([]);
   const cleanData = data.filter(Boolean);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const theme = {
@@ -298,6 +299,89 @@ const totalPnLPct =
     ? ((totalPnL / totalInvestment) * 100)
     : 0;
 
+// 🔥 TODAY CHANGE + TOP MOVERS
+
+const totalToday = cleanData.reduce(
+  (sum, d) =>
+    sum +
+    ((Number(d?.dailyChange) || 0) *
+     (Number(d?.quantity) || 0)),
+  0
+);
+
+const prevValue = totalValue - totalToday;
+
+const todayPct =
+  prevValue > 0 ? (totalToday / prevValue) * 100 : 0;
+
+// sort by daily %
+const stockOnly = cleanData.filter(
+  (d) => d.dailyPct !== 0 && !isNaN(d.dailyPct)
+);
+
+const sorted = [...stockOnly].sort(
+  (a, b) => (b.dailyPct || 0) - (a.dailyPct || 0)
+);
+
+const topGainer = sorted[0];
+const topLoser = sorted[sorted.length - 1];
+
+
+// 🧠 PORTFOLIO HEALTH SCORE
+
+// 1. Diversification
+const weights = cleanData.map(d =>
+  totalValue > 0 ? (d.currentValue || 0) / totalValue : 0
+);
+const maxWeight = Math.max(...weights, 0);
+
+let diversificationScore = 100;
+if (maxWeight > 0.4) diversificationScore -= 40;
+else if (maxWeight > 0.25) diversificationScore -= 20;
+
+// 2. Sector concentration
+const healthSectorMap = {};
+
+cleanData.forEach((d) => {
+  const sector = d.sector || "Others";
+  healthSectorMap[sector] =
+    (healthSectorMap[sector] || 0) + (d.currentValue || 0);
+});
+
+const maxSectorValue = Math.max(
+  ...Object.values(healthSectorMap),
+  0
+);
+
+let sectorScore = 100;
+if (totalValue > 0 && maxSectorValue / totalValue > 0.5) {
+  sectorScore -= 30;
+}
+
+// 3. Loss exposure
+const lossStocks = cleanData.filter(d => (d.pnl || 0) < 0).length;
+
+const lossScore =
+  cleanData.length > 0
+    ? 100 - (lossStocks / cleanData.length) * 100
+    : 100;
+
+// 4. Return quality
+let returnScore = 50;
+
+if (totalPnLPct > 15) returnScore = 100;
+else if (totalPnLPct > 5) returnScore = 80;
+else if (totalPnLPct > 0) returnScore = 60;
+else returnScore = 30;
+
+// Final score
+const healthScore = Math.round(
+  diversificationScore * 0.35 +
+  sectorScore * 0.25 +
+  lossScore * 0.2 +
+  returnScore * 0.2
+);
+
 cleanData.forEach((d) => {
   const value = d.currentValue || 0;
   const symbol = (d.symbol || "").toLowerCase();
@@ -378,40 +462,58 @@ cleanData.forEach((d) => {
       throw new Error("Failed to fetch prices");
     }
 
-    const json = await res.json();
-    const backendData = json.data || [];
+  const json = await res.json();
+  const backendData = json.data || [];
 
-    const priceMap = new Map(
+  const priceMap = new Map(
   backendData.map(p => [
     p.symbol.replace(/-E$|-GB$/i, ""),
     p
   ])
 );
 
+  const prevPrices = new Map(
+  data.map((d) => [d.symbol, d.currentPrice || 0])
+);
+
 const updated = data.map((item) => {
   const key = item.symbol.replace(/-E$|-GB$/i, "");
   const match = priceMap.get(key);
 
-      if (!match) return item;
+  if (!match) return item;
 
-      const currentPrice = Number(match.currentPrice || 0);
-      const investment = Number(item.quantity) * Number(item.avgPrice);
-      const currentValue = Number(item.quantity) * currentPrice;
-      const pnl = currentValue - investment;
-      const pnlPct = investment > 0 ? (pnl / investment) * 100 : 0;
+  const currentPrice = Number(match.currentPrice || 0);
+  const prevPrice = prevPrices.get(item.symbol);
 
-      return {
-        ...item,
-        currentPrice,
-        currentValue,
-        pnl,
-        pnlPct,
-      };
-    });
+// 🔥 DAILY CHANGE CALCULATION (FIXED)
+  const dailyChange = Number(match.change || 0);
+  const dailyPct = Number(match.pChange || 0);
+
+  const investment =
+    Number(item.quantity) * Number(item.avgPrice);
+
+  const currentValue =
+    Number(item.quantity) * currentPrice;
+
+  const pnl = currentValue - investment;
+  const pnlPct =
+    investment > 0 ? (pnl / investment) * 100 : 0;
+
+  return {
+    ...item,
+    currentPrice,
+    currentValue,
+    pnl,
+    pnlPct,
+    dailyChange,   // ✅ REQUIRED
+    dailyPct       // ✅ REQUIRED
+  };
+});
 
     setData(updated);
     saveLocalPortfolio(updated);
     refreshProfiles();
+    setLastUpdated(new Date());
 
     alert("✅ Prices updated successfully");
 
@@ -1178,7 +1280,131 @@ color: dark ? "#e5e7eb" : "#111827",
       </div>
     )}
 
-    {/* 🔷 KPI CARDS */}
+<div
+  className="card"
+  style={{
+    marginBottom: 16,
+    padding: 16,
+    border: `1px solid ${theme.border}`,
+    borderRadius: 14,
+  }}
+>
+  <h3 style={{ color: theme.subText }}>Portfolio Health</h3>
+
+  <p
+    style={{
+      fontSize: 20,
+      fontWeight: 600,
+      marginTop: 6,
+      color:
+        healthScore >= 80
+          ? "#22c55e"
+          : healthScore >= 60
+          ? "#f59e0b"
+          : "#ef4444",
+    }}
+  >
+    {healthScore} / 100
+  </p>
+
+  <span style={{ fontSize: 12, opacity: 0.8 }}>
+    {healthScore >= 80
+      ? "Strong portfolio"
+      : healthScore >= 60
+      ? "Balanced portfolio"
+      : "Needs attention"}
+  </span>
+</div>
+
+<div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+  {maxWeight > 0.4 && (
+    <div>⚠️ One stock dominates your portfolio</div>
+  )}
+
+  {totalValue > 0 && maxSectorValue / totalValue > 0.5 && (
+    <div>⚠️ High sector concentration</div>
+  )}
+
+  {lossStocks > cleanData.length / 2 && (
+    <div>⚠️ Majority of stocks are in loss</div>
+  )}
+</div>
+
+{/* 🔶 TODAY + TOP MOVERS */}
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 14,
+    marginBottom: 16,
+  }}
+>
+  {/* TODAY */}
+  <div
+    className="card"
+    style={{
+      padding: 16,
+      borderRadius: 14,
+      border: `1px solid ${theme.border}`,
+    }}
+  >
+    <h3 style={{ color: theme.subText }}>Today</h3>
+
+    <p
+      className={
+        totalToday > 0 ? "green" : totalToday < 0 ? "red" : ""
+      }
+      style={{ fontSize: 18, fontWeight: 600 }}
+    >
+      ₹{totalToday.toLocaleString()}{" "}
+      {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
+    </p>
+
+    <span style={{ fontSize: 12, opacity: 0.8 }}>
+      {todayPct.toFixed(2)}%
+    </span>
+
+    {/* ⏱ TIMESTAMP */}
+    <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+      {lastUpdated
+        ? `Updated at ${lastUpdated.toLocaleTimeString()}`
+        : "Not updated yet"}
+    </div>
+  </div>
+
+  {/* TOP GAINER */}
+  {topGainer && (
+    <div className="card" style={{ padding: 16, borderRadius: 14 }}>
+      <h3 style={{ color: theme.subText }}>Top Gainer</h3>
+
+      <p style={{ fontWeight: 600 }}>
+        {topGainer.symbol}
+      </p>
+
+      <span className="green" style={{ fontSize: 12 }}>
+        ₹{(topGainer.dailyChange * topGainer.quantity)?.toFixed(0)} ▲ (
+        {topGainer.dailyPct?.toFixed(2)}%)
+      </span>
+    </div>
+  )}
+
+  {/* TOP LOSER */}
+  {topLoser && (
+    <div className="card" style={{ padding: 16, borderRadius: 14 }}>
+      <h3 style={{ color: theme.subText }}>Top Loser</h3>
+
+      <p style={{ fontWeight: 600 }}>
+        {topLoser.symbol}
+      </p>
+
+      <span className="red" style={{ fontSize: 12 }}>
+        ₹{(topLoser.dailyChange * topLoser.quantity)?.toFixed(0)} ▼ (
+        {topLoser.dailyPct?.toFixed(2)}%)
+      </span>
+    </div>
+  )}
+</div>
+
     {/* 🔷 KPI CARDS */}
 <div
   style={{
