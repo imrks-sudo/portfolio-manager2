@@ -7,11 +7,20 @@ const axios = require("axios");
 
 const app = express();
 app.use(cors({
-  origin: [
-    "http://localhost:5173",              // ✅ local Vite dev
-    "https://myportfoliomanager.vercel.app" // ✅ production
-  ],
+  origin: function (origin, callback) {
+    const allowed = [
+      "https://myportfoliomanager.vercel.app",
+      "http://localhost:5173"
+    ];
+
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type", "x-api-key"],
 }));
 
 const rateLimit = require("express-rate-limit");
