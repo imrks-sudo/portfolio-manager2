@@ -103,6 +103,8 @@ app.post("/update-prices", async (req, res) => {
         // =========================
         let change = 0;
         let pChange = 0;
+        let high52 = 0;
+        let low52 = 0;
         if (s.includes("fund") || s.includes("plan")) {
 
           const search = await axios.get(
@@ -191,6 +193,11 @@ try {
 
 price = Number(response.data?.priceInfo?.lastPrice) || 0;
 
+const whl = response.data?.priceInfo?.weekHighLow || {};
+
+high52 = Number(whl.max) || 0;
+low52 = Number(whl.min) || 0;
+
 change =
   Number(response.data?.priceInfo?.change) || 0;
 
@@ -217,6 +224,8 @@ pChange =
   currentPrice: price,
   change: change || 0,
   pChange: pChange || 0,
+  high52,
+  low52,
 });
 
         successCount++;

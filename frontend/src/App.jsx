@@ -506,7 +506,9 @@ const updated = data.map((item) => {
     pnl,
     pnlPct,
     dailyChange,   // ✅ REQUIRED
-    dailyPct       // ✅ REQUIRED
+    dailyPct,       // ✅ REQUIRED
+    high52: match.high52,
+  low52: match.low52,
   };
 });
 
@@ -1635,6 +1637,7 @@ color: dark ? "#e5e7eb" : "#111827",
                 <tr>
                   <th>Stock</th>
                   <th>Sector</th>
+                  <th>52W Range</th>
                   <th>Qty</th>
                   <th>Avg</th>
                   <th>Price</th>
@@ -1647,7 +1650,16 @@ color: dark ? "#e5e7eb" : "#111827",
 
             <tbody>
   {cleanData.map((d) => {
+
     const isEditing = editingId === d.symbol;
+    const range = d.high52 && d.low52 ? d.high52 - d.low52 : 0;
+
+const position =
+  range > 0
+    ? ((d.currentPrice - d.low52) / range) * 100
+    : 0;
+
+const clampedPosition = Math.max(0, Math.min(100, position));
 
     return (
       <tr key={d.symbol} style={{ borderRadius: 10 }}>
@@ -1673,6 +1685,54 @@ color: dark ? "#e5e7eb" : "#111827",
   )}
 </td>
         <td>{d.sector}</td>
+
+        <td>
+  {d.high52 && d.low52 ? (
+    <div style={{ width: 120 }}>
+      <div
+        style={{
+          height: 6,
+          borderRadius: 6,
+          background: "#e5e7eb",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: `${clampedPosition}%`,
+            top: 0,
+            transform: "translateX(-50%)",
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background:
+              clampedPosition > 80
+                ? "#22c55e"
+                : clampedPosition < 20
+                ? "#ef4444"
+                : "#3b82f6",
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 10,
+          marginTop: 4,
+          opacity: 0.7,
+        }}
+      >
+        <span>L</span>
+        <span>H</span>
+      </div>
+    </div>
+  ) : (
+    "-"
+  )}
+</td>
 
         <td>
           {isEditing ? (
