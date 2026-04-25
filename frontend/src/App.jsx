@@ -1,6 +1,21 @@
 import React, { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 
+import posthog from 'posthog-js';
+
+import {
+  LayoutDashboard,
+  Flame,
+  Target,
+  TrendingUp,
+  BarChart3,
+  Lightbulb,
+  HelpCircle,
+  Info,
+  Heart,
+  PieChart as PieChartIcon 
+} from "lucide-react";
+
 import {
   PieChart,
   Pie,
@@ -24,11 +39,24 @@ import Papa from "papaparse";
 const PROFILE_KEY = "activeProfile";
 
 const getActiveProfile = () => {
-  return localStorage.getItem(PROFILE_KEY);
+  let profile = localStorage.getItem(PROFILE_KEY);
+
+  if (!profile) {
+    profile = "default";   // 👈 KEY FIX
+    localStorage.setItem(PROFILE_KEY, profile);
+  }
+
+  return profile;
 };
 
 const setActiveProfile = (name) => {
   localStorage.setItem(PROFILE_KEY, name);
+
+  // 🔥 Track user switch
+  posthog.identify(name);
+
+  // optional (recommended)
+  posthog.capture('profile_switched', { profile: name });
 };
 
 const getPortfolioKey = (profile) => {
@@ -73,7 +101,7 @@ const formatPercent = (value, total) =>
   total ? ((value / total) * 100).toFixed(2) : "0.00";
 
 function App() {
-  const [profile, setProfile] = useState(getActiveProfile());
+  const [profile, setProfile] = useState(() => getActiveProfile());
   const [data, setData] = useState([]);
   const cleanData = data.filter(Boolean);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -96,9 +124,21 @@ function App() {
     .map((k) => k.replace("portfolio_", ""));
   });
 
-  const switchProfile = (name) => {
-  setActiveProfile(name);
-  setProfile(name);
+useEffect(() => {
+  posthog.init('phc_uWKkVjeiNkgXHPDMSugLefet86cAmhQcxkgPdUvi2gdm', {
+    api_host: 'https://app.posthog.com',
+  });
+
+  const profile = getActiveProfile() || "guest";
+
+  posthog.identify(profile);
+
+  posthog.capture('app_opened');
+}, []);
+
+  const switchProfile = (newProfile) => {
+  setActiveProfile(newProfile);
+  setProfile(newProfile);
   setData(loadLocalPortfolio());
 };
 
@@ -267,13 +307,21 @@ const getDiffData = () => {
   setData(local);
 };
 
-  useEffect(() => {
-  fetchData();
-}, []);
+useEffect(() => {
+  if (view === "dashboard") {
+    posthog.capture('portfolio_viewed');
+  }
+}, [view]);
 
 useEffect(() => {
   localStorage.setItem("darkMode", dark);
 }, [dark]);
+
+useEffect(() => {
+  const p = getActiveProfile();
+  setProfile(p);
+  setData(loadLocalPortfolio());
+}, []);
 
   const totalValue = cleanData.reduce(
   (s, d) => s + (Number(d?.currentValue) || 0),
@@ -333,7 +381,7 @@ const topLoser = sorted[sorted.length - 1];
 const weights = cleanData.map(d =>
   totalValue > 0 ? (d.currentValue || 0) / totalValue : 0
 );
-const maxWeight = Math.max(...weights, 0);
+const maxWeight = weights.length ? Math.max(...weights) : 0;
 
 let diversificationScore = 100;
 if (maxWeight > 0.4) diversificationScore -= 40;
@@ -436,6 +484,7 @@ cleanData.forEach((d) => {
     : 0;
 
   const handleUpdatePrices = async () => {
+    posthog.capture('update_prices_clicked');
     if (!data.length) {
   alert("⚠️ No holdings to update");
   return;
@@ -677,6 +726,7 @@ const handleParsedData = async (results) => {
 };
 
 const handleFileUpload = (e) => {
+  posthog.capture('file_uploaded');
   console.log("📂 File upload triggered");
 
   const file = e.target.files?.[0];
@@ -905,7 +955,8 @@ color: "#fff",
     color: theme.text
   }}
 >
-      <aside
+
+<aside
   className="sidebar"
   style={{
     background: theme.card,
@@ -915,105 +966,133 @@ color: "#fff",
     minWidth: 220
   }}
 >
-        <h2>Portfolio Management</h2>
+  <h2>Portfolio Management</h2>
 
-        <p
-  onClick={() => setView("dashboard")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "dashboard" ? "#2563eb" : "transparent",
-    color: view === "dashboard" ? "#fff" : theme.text,
-  }}
->
-  🏠 Dashboard
-</p>
+  {/* DASHBOARD */}
+  <div
+    onClick={() => setView("dashboard")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "dashboard" ? "#2563eb" : "transparent",
+      color: view === "dashboard" ? "#fff" : theme.text,
+    }}
+  >
+    <LayoutDashboard size={18} strokeWidth={1.5} />
+    <span>Dashboard</span>
+  </div>
 
+  {/* ANALYTICS */}
+  <div
+    onClick={() => setView("analytics")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "analytics" ? "#2563eb" : "transparent",
+      color: view === "analytics" ? "#fff" : theme.text,
+    }}
+  >
+    <BarChart3 size={18} strokeWidth={1.5} />
+    <span>Analytics</span>
+  </div>
 
-<p
-  onClick={() => setView("analytics")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "analytics" ? "#2563eb" : "transparent",
-    color: view === "analytics" ? "#fff" : theme.text,
-  }}
->
-  📊 Analytics
-</p>
+  {/* INSIGHTS */}
+  <div
+    onClick={() => setView("insights")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "insights" ? "#2563eb" : "transparent",
+      color: view === "insights" ? "#fff" : theme.text,
+    }}
+  >
+    <Lightbulb size={18} strokeWidth={1.5} />
+    <span>Insights</span>
+  </div>
 
+  {/* HELP */}
+  <div
+    onClick={() => setView("help")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "help" ? "#2563eb" : "transparent",
+      color: view === "help" ? "#fff" : theme.text,
+    }}
+  >
+    <HelpCircle size={18} strokeWidth={1.5} />
+    <span>Help</span>
+  </div>
 
-<p
-  onClick={() => setView("insights")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "insights" ? "#2563eb" : "transparent",
-    color: view === "insights" ? "#fff" : theme.text,
-  }}
->
-  💡 Insights
-</p>
+  {/* ABOUT */}
+  <div
+    onClick={() => setView("about")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "about" ? "#2563eb" : "transparent",
+      color: view === "about" ? "#fff" : theme.text,
+    }}
+  >
+    <Info size={18} strokeWidth={1.5} />
+    <span>About</span>
+  </div>
 
-<p
-  onClick={() => setView("help")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "help" ? "#2563eb" : "transparent",
-    color: view === "help" ? "#fff" : theme.text,
-  }}
->
-  ❓ Help
-</p>
+  {/* SUPPORT */}
+  <div
+    onClick={() => setView("support")}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      background: view === "support" ? "#2563eb" : "transparent",
+      color: view === "support" ? "#fff" : theme.text,
+    }}
+  >
+    <Heart size={18} strokeWidth={1.5} />
+    <span>Support</span>
+  </div>
 
-
-<p
-  onClick={() => setView("about")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "about" ? "#2563eb" : "transparent",
-    color: view === "about" ? "#fff" : theme.text,
-  }}
->
-  ℹ️ About
-</p>
-
-<p
-  onClick={() => setView("support")}
-  style={{
-    padding: "8px 10px",
-    borderRadius: 8,
-    cursor: "pointer",
-    background: view === "support" ? "#2563eb" : "transparent",
-    color: view === "support" ? "#fff" : theme.text,
-  }}
->
-  ❤️ Support
-</p>
-
-        <button
-  onClick={() => setDark(prev => !prev)}
-  style={{
-    marginTop: 12,
-    padding: "6px 10px",
-    borderRadius: 6,
-    background: "#3b82f6",
-    border: "none",
-    color: "#fff",
-    fontSize: 12,
-    cursor: "pointer"
-  }}
->
-  {dark ? "Light" : "Dark"}
-</button>
-      </aside>
+  {/* THEME TOGGLE */}
+  <button
+    onClick={() => setDark(prev => !prev)}
+    style={{
+      marginTop: 12,
+      padding: "6px 10px",
+      borderRadius: 6,
+      background: "#3b82f6",
+      border: "none",
+      color: "#fff",
+      fontSize: 12,
+      cursor: "pointer"
+    }}
+  >
+    {dark ? "Light" : "Dark"}
+  </button>
+</aside>
 
       <main
   className="main"
@@ -1076,7 +1155,7 @@ color: dark ? "#e5e7eb" : "#111827",
   {/* ✅ LOGOUT BUTTON */}
   <button
   onClick={() => {
-    localStorage.removeItem("activeProfile");
+    localStorage.setItem("activeProfile", "default");
     setProfile(null);
     setData([]);
   }}
@@ -1293,43 +1372,80 @@ color: dark ? "#e5e7eb" : "#111827",
 >
   <h3 style={{ color: theme.subText }}>Portfolio Health</h3>
 
-  <p
-    style={{
-      fontSize: 20,
-      fontWeight: 600,
-      marginTop: 6,
-      color:
-        healthScore >= 80
-          ? "#22c55e"
-          : healthScore >= 60
-          ? "#f59e0b"
-          : "#ef4444",
-    }}
-  >
-    {healthScore} / 100
-  </p>
+  {/* SCORE + DOTS */}
+  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+    
+    <span
+      style={{
+        fontSize: 20,
+        fontWeight: 600,
+        color:
+          healthScore >= 80
+            ? "#22c55e"
+            : healthScore >= 60
+            ? "#f59e0b"
+            : "#ef4444",
+      }}
+    >
+      {healthScore} / 100
+    </span>
 
-  <span style={{ fontSize: 12, opacity: 0.8 }}>
+    {/* DOT VISUAL */}
+    <div style={{ display: "flex", gap: 4 }}>
+      {[...Array(10)].map((_, i) => {
+        const filled = i < Math.round(healthScore / 10);
+
+        return (
+          <span
+            key={i}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: filled
+                ? healthScore >= 80
+                  ? "#22c55e"
+                  : healthScore >= 60
+                  ? "#f59e0b"
+                  : "#ef4444"
+                : "#374151",
+              display: "inline-block",
+            }}
+          />
+        );
+      })}
+    </div>
+  </div>
+
+  {/* LABEL */}
+  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
     {healthScore >= 80
       ? "Strong portfolio"
       : healthScore >= 60
       ? "Balanced portfolio"
       : "Needs attention"}
-  </span>
-</div>
+  </div>
 
-<div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-  {maxWeight > 0.4 && (
-    <div>⚠️ One stock dominates your portfolio</div>
-  )}
+  {/* WARNINGS */}
+  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+    {maxWeight > 0.4 && (
+      <div style={{ color: "#f59e0b" }}>
+        ⚠️ One stock dominates your portfolio
+      </div>
+    )}
 
-  {totalValue > 0 && maxSectorValue / totalValue > 0.5 && (
-    <div>⚠️ High sector concentration</div>
-  )}
+    {totalValue > 0 && maxSectorValue / totalValue > 0.5 && (
+      <div style={{ color: "#f59e0b" }}>
+        ⚠️ High sector concentration
+      </div>
+    )}
 
-  {lossStocks > cleanData.length / 2 && (
-    <div>⚠️ Majority of stocks are in loss</div>
-  )}
+    {lossStocks > cleanData.length / 2 && (
+      <div style={{ color: "#ef4444" }}>
+        ⚠️ Majority of stocks are in loss
+      </div>
+    )}
+  </div>
 </div>
 
 {/* 🔶 TODAY + TOP MOVERS */}
@@ -1568,6 +1684,7 @@ color: dark ? "#e5e7eb" : "#111827",
     {/* ADD BUTTON */}
     <button
       onClick={async () => {
+        posthog.capture('holding_added');
         if (!form.symbol || !form.quantity || !form.avgPrice) return;
 
         const newItem = {
@@ -1764,7 +1881,7 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           )}
         </td>
 
-        <td>{d.currentPrice?.toFixed(2)}</td>
+        <td>{d.currentPrice ? d.currentPrice.toFixed(2) : "-"}</td>
         <td>{d.currentValue?.toFixed(0)}</td>
         
         <td className={d.pnl > 0 ? "green" : d.pnl < 0 ? "red" : ""}>
@@ -1985,7 +2102,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
 
     {/* Asset */}
     <div className="card" style={{ flex: 1, minWidth: 420 }}>
-      <h3 style={{ color: theme.text }}>Asset Allocation</h3>
+      <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <PieChartIcon size={18} strokeWidth={1.5} />
+  Asset Allocation
+</h3>
 
       <PieChart width={340} height={300}>
 
@@ -2048,7 +2175,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
 {view === "insights" && (
   <div className="card" style={{ marginBottom: 20, padding: 20 }}>
 
-    <h3 style={{ color: theme.text }}>🔥 FIRE Planner</h3>
+    <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <Flame size={18} strokeWidth={1.5} />
+  FIRE Planner
+</h3>
 
     {/* 🔹 LEFT + RIGHT WRAPPER */}
     <div style={{
@@ -2154,7 +2291,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           borderRadius: 12,
           border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: theme.subText }}>🎯 FIRE Target</p>
+          <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <Target size={18} strokeWidth={1.5} />
+  FIRE Target
+</h3>
           <h2>₹{futureValue.toLocaleString()}</h2>
         </div>
 
@@ -2164,7 +2311,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           borderRadius: 12,
           border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: theme.subText }}>💸 Monthly SIP Needed</p>
+          <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <TrendingUp size={18} strokeWidth={1.5} />
+  Monthly SIP Needed
+</h3>
           <h2>₹{requiredSip.toLocaleString()}</h2>
         </div>
 
@@ -2174,7 +2331,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           borderRadius: 12,
           border: `1px solid ${theme.border}`
         }}>
-          <p style={{ fontSize: 12, color: theme.subText }}>📈 Progress</p>
+          <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <BarChart3 size={18} strokeWidth={1.5} />
+  Progress
+</h3>
 
           <h2>{progress.toFixed(1)}%</h2>
 
@@ -2206,7 +2373,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
 {view === "insights" && (
   <>
     <div className="card" style={{ marginTop: 20 }}>
-      <h3 style={{ color: theme.text }}>💡 Insights</h3>
+      <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <Lightbulb size={18} strokeWidth={1.5} />
+  Insights
+</h3>
 
       <div style={{
         display: "grid",
@@ -2231,7 +2408,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
         background: theme.card,
         border: `1px solid ${theme.border}`
       }}>
-        <h4 style={{ marginBottom: 12 }}>📊 Asset Allocation</h4>
+        <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <PieChartIcon size={18} strokeWidth={1.5} />
+  Asset Allocation
+</h3>
 
         {[
           { label: "Stocks", value: assetTotals.stocks },

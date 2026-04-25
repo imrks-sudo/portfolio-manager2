@@ -238,6 +238,28 @@ button:hover {
   color: #ef4444;
 }
 
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.navItem.active {
+  background: #2563eb;
+  color: #fff;
+}
+
 /* ================= RESPONSIVE ================= */
 @media (max-width: 900px) {
   .fire-grid {
