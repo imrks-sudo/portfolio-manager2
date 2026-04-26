@@ -49,6 +49,12 @@ const getActiveProfile = () => {
   return profile;
 };
 
+const getAllProfiles = () => {
+  return Object.keys(localStorage)
+    .filter((k) => k.startsWith("portfolio_"))
+    .map((k) => k.replace("portfolio_", ""));
+};
+
 const setActiveProfile = (name) => {
   localStorage.setItem(PROFILE_KEY, name);
 
@@ -104,9 +110,15 @@ function App() {
   const [profile, setProfile] = useState(() => getActiveProfile());
   const [data, setData] = useState([]);
   const cleanData = data.filter(Boolean);
+  const hasData = cleanData.length > 0;
   const [lastUpdated, setLastUpdated] = useState(null);
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
   const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState("desc");
   const theme = {
   bg: dark ? "#020617" : "#ffffff",
   card: dark ? "#020617" : "#f9fafb",
@@ -285,11 +297,21 @@ const getDiffData = () => {
   });
 
   // FIRE
-  const [rate, setRate] = useState(12);
-  const [years, setYears] = useState(10);
-  const [inflation, setInflation] = useState(6);
-  const [fireTarget, setFireTarget] = useState(50000000);
-  const [sip, setSip] = useState(20000);
+const [rate, setRate] = useState(0);
+const [years, setYears] = useState(0);
+const [inflation, setInflation] = useState(0);
+const [fireTarget, setFireTarget] = useState(0);
+const [sip, setSip] = useState(0);
+
+  useEffect(() => {
+  if (cleanData.length === 0) {
+    setRate(12);
+    setYears(10);
+    setInflation(6);
+    setFireTarget(50000000);
+    setSip(0); // 👈 IMPORTANT (reset SIP)
+  }
+}, [cleanData.length]);
 
   const resetCalculator = () => {
   setRate(0);
@@ -422,13 +444,56 @@ else if (totalPnLPct > 5) returnScore = 80;
 else if (totalPnLPct > 0) returnScore = 60;
 else returnScore = 30;
 
-// Final score
-const healthScore = Math.round(
-  diversificationScore * 0.35 +
-  sectorScore * 0.25 +
-  lossScore * 0.2 +
-  returnScore * 0.2
+
+
+/* ✅ ADD THIS RIGHT BELOW */
+
+const stockOnly10Rule = cleanData.filter((d) => {
+  const symbol = (d.symbol || "").toLowerCase();
+
+  return !(
+    symbol.includes("fund") ||
+    symbol.includes("plan") ||
+    symbol.includes("etf") ||
+    symbol.includes("sgb") ||
+    symbol.endsWith("-e") ||
+    symbol.endsWith("-gb")
+  );
+});
+
+// ✅ use total portfolio INVESTED amount
+const totalInvestedPortfolio = cleanData.reduce(
+  (sum, d) => sum + ((d.quantity || 0) * (d.avgPrice || 0)),
+  0
 );
+
+let overAllocatedStock = null;
+
+if (totalInvestedPortfolio > 0) {
+  for (let s of stockOnly10Rule) {
+
+    const invested = (s.quantity || 0) * (s.avgPrice || 0);
+
+    const weight = invested / totalInvestedPortfolio;
+
+    if (weight > 0.1) {
+      overAllocatedStock = {
+        name: s.symbol,
+        pct: (weight * 100).toFixed(1),
+      };
+      break;
+    }
+  }
+}
+
+const healthScore = hasData
+  ? Math.round(
+      diversificationScore * 0.35 +
+      sectorScore * 0.25 +
+      lossScore * 0.2 +
+      returnScore * 0.2
+    )
+  : 0;
 
 cleanData.forEach((d) => {
   const value = d.currentValue || 0;
@@ -446,37 +511,44 @@ cleanData.forEach((d) => {
 });
 
   // FIRE CALC
-  useEffect(() => {
-    const r = rate / 100;
-    const n = years;
-    const inf = inflation / 100;
+useEffect(() => {
+  // ✅ FIX: no portfolio → reset everything
+  if (cleanData.length === 0) {
+    setFutureValue(0);
+    setRequiredSip(0);
+    return;
+  }
 
-    if (years <= 0) {
-  setFutureValue(0);
-  setRequiredSip(0);
-  return;
-}
+  const r = rate / 100;
+  const n = years;
+  const inf = inflation / 100;
 
-    const inflatedFire = fireTarget * Math.pow(1 + inf, n);
-    const fvCurrent = totalValue * Math.pow(1 + r, n);
+  if (years <= 0) {
+    setFutureValue(0);
+    setRequiredSip(0);
+    return;
+  }
 
-    let fvSip =
-      r > 0
-        ? sip * ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
-        : sip * 12 * n;
+  const inflatedFire = fireTarget * Math.pow(1 + inf, n);
+  const fvCurrent = totalValue * Math.pow(1 + r, n);
 
-    const totalFuture = fvCurrent + fvSip;
-    const remaining = Math.max(inflatedFire - totalFuture, 0);
+  let fvSip =
+    r > 0
+      ? sip * ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
+      : sip * 12 * n;
 
-    let sipNeeded =
-      r > 0
-        ? remaining /
-          ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
-        : remaining / (n * 12);
+  const totalFuture = fvCurrent + fvSip;
+  const remaining = Math.max(inflatedFire - totalFuture, 0);
 
-    setFutureValue(Math.round(inflatedFire));
-    setRequiredSip(Math.round(sipNeeded));
-  }, [rate, years, inflation, fireTarget, sip, totalValue]);
+  let sipNeeded =
+    r > 0
+      ? remaining /
+        ((Math.pow(1 + r / 12, n * 12) - 1) / (r / 12))
+      : remaining / (n * 12);
+
+  setFutureValue(Math.round(inflatedFire));
+  setRequiredSip(Math.round(sipNeeded));
+}, [rate, years, inflation, fireTarget, sip, totalValue, cleanData.length]);
 
   const progress =
   futureValue > 0
@@ -831,6 +903,18 @@ const handleFileUpload = (e) => {
     else allocation.stocks += investment;
   });
 
+  const sortedData = [...cleanData].sort((a, b) => {
+  if (!sortKey) return 0;
+
+  const A = a[sortKey];
+  const B = b[sortKey];
+
+  // ✅ NUMBER SORT
+  return sortDir === "asc"
+    ? (A || 0) - (B || 0)
+    : (B || 0) - (A || 0);
+});
+
   const assetData = [
     { name: "Stocks", value: allocation.stocks },
     { name: "MF", value: allocation.mf },
@@ -1077,21 +1161,43 @@ color: "#fff",
   </div>
 
   {/* THEME TOGGLE */}
-  <button
-    onClick={() => setDark(prev => !prev)}
+  
+   <div
+  onClick={() => setDark(!dark)}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    cursor: "pointer"
+  }}
+>
+  <span style={{ fontSize: 12 }}>
+    {dark ? "🌙" : "☀️"}
+  </span>
+
+  <div
     style={{
-      marginTop: 12,
-      padding: "6px 10px",
-      borderRadius: 6,
-      background: "#3b82f6",
-      border: "none",
-      color: "#fff",
-      fontSize: 12,
-      cursor: "pointer"
+      width: 40,
+      height: 20,
+      borderRadius: 999,
+      background: dark ? "#2563eb" : "#e5e7eb",
+      padding: 2,
+      display: "flex",
+      alignItems: "center"
     }}
   >
-    {dark ? "Light" : "Dark"}
-  </button>
+    <div
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        background: "#fff",
+        transform: dark ? "translateX(18px)" : "translateX(0px)",
+        transition: "0.25s"
+      }}
+    />
+  </div>
+</div>
 </aside>
 
       <main
@@ -1104,88 +1210,237 @@ color: "#fff",
 }}
 >
 
-<div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-  
-  <div style={{
-    padding: "6px 10px",
-    borderRadius: 6,
-    background: dark ? "#1f2937" : "#e5e7eb",
-color: dark ? "#e5e7eb" : "#111827",
-    fontSize: 12
-  }}>
-    👤 {profile}
+<div
+  style={{
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+    gap: 12
+  }}
+>
+
+  {/* LEFT */}
+  <div>
+    <h2 style={{ margin: 0, fontWeight: 600 }}>
+      Hello, {profile} 👋
+    </h2>
+    <div style={{ fontSize: 12, opacity: 0.7 }}>
+      Here's your portfolio overview
+    </div>
   </div>
 
-<select
-  onChange={(e) => {
-    if (e.target.value === "__new__") {
-      const name = prompt("Enter new profile name");
-      if (!name) return;
+  {showProfileModal && (
+  <div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 200
+    }}
+    onClick={() => setShowProfileModal(false)}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: 360,
+        maxHeight: "70vh",
+        overflowY: "auto",
+        background: theme.card,
+        borderRadius: 14,
+        border: `1px solid ${theme.border}`,
+        padding: 16
+      }}
+    >
 
-      setActiveProfile(name);
-      setProfile(name);
-      saveLocalPortfolio([]); // initialize empty portfolio
-      refreshProfiles();
-      setData([]);
-    } else {
-      switchProfile(e.target.value);
-    }
-  }}
-  style={{
-    padding: "6px 8px",
-    borderRadius: 6,
-    border: `1px solid ${theme.border}`,
-    background: theme.card,
-    color: theme.text,
-    fontSize: 13,
-    cursor: "pointer"
-  }}
->
-  <option value="">Switch Profile</option>
+      <h3 style={{ marginBottom: 12 }}>Manage Profiles</h3>
 
-  {profiles.map((p) => (
-    <option key={p} value={p}>
-      {p}
-    </option>
-  ))}
+      {/* PROFILE LIST */}
+      {profiles.map((p) => (
+        <div
+          key={p}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "8px 10px",
+            borderRadius: 8,
+            marginBottom: 6,
+            background: p === profile ? "#2563eb" : "transparent",
+            color: p === profile ? "#fff" : theme.text
+          }}
+        >
+          {/* SWITCH */}
+          <span
+            style={{ cursor: "pointer", flex: 1 }}
+            onClick={() => {
+              switchProfile(p);
+              setShowProfileModal(false);
+            }}
+          >
+            👤 {p}
+          </span>
 
-  <option value="__new__">➕ New Profile</option>
-</select>
+          {/* DELETE */}
+          {p !== profile && (
+            <span
+              onClick={() => {
+                if (!confirm(`Delete "${p}"?`)) return;
 
-  {/* ✅ LOGOUT BUTTON */}
-  <button
-  onClick={() => {
-    localStorage.setItem("activeProfile", "default");
-    setProfile(null);
-    setData([]);
-  }}
-  style={{
-    padding: "6px 10px",
-    borderRadius: 6,
-    background: theme.card,
-    border: `1px solid ${theme.border}`,
-    color: theme.text,
-    cursor: "pointer"
-  }}
->
-  Logout
-</button>
+                localStorage.removeItem(`portfolio_${p}`);
+                refreshProfiles();
+              }}
+              style={{
+                color: "#ef4444",
+                cursor: "pointer",
+                fontSize: 12
+              }}
+            >
+              ✕
+            </span>
+          )}
+        </div>
+      ))}
 
+      {/* NEW PROFILE */}
+      <div
+        style={{
+          marginTop: 10,
+          padding: "10px",
+          borderTop: `1px solid ${theme.border}`,
+          cursor: "pointer"
+        }}
+        onClick={() => {
+          const name = prompt("Enter profile name");
+          if (!name) return;
+
+          const trimmed = name.trim();
+
+          setActiveProfile(trimmed);
+          setProfile(trimmed);
+          saveLocalPortfolio([]);
+          setData([]);
+
+          refreshProfiles();
+          setShowProfileModal(false);
+        }}
+      >
+        ➕ New Profile
+      </div>
+
+      {/* CLOSE */}
+      <button
+        onClick={() => setShowProfileModal(false)}
+        style={{
+          marginTop: 10,
+          width: "100%",
+          padding: "8px",
+          borderRadius: 8,
+          border: "none",
+          background: "#2563eb",
+          color: "#fff",
+          cursor: "pointer"
+        }}
+      >
+        Close
+      </button>
+
+    </div>
+  </div>
+)}
+
+  {/* RIGHT */}
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+
+    {/* 🔍 SEARCH */}
+    <input
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+      placeholder="Search holdings..."
+      style={{
+        padding: "8px 12px",
+        borderRadius: 8,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 13,
+        width: 220
+      }}
+    />
+
+    {/* 👤 PROFILE */}
+    <div style={{ position: "relative" }}>
+      <div
+        onClick={() => setShowProfileMenu(prev => !prev)}
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: "50%",
+          background: "#3b82f6",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          fontWeight: 600
+        }}
+      >
+        {profile?.charAt(0)?.toUpperCase()}
+      </div>
+
+      {showProfileMenu && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 42,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 12,
+            width: 180,
+            boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+            overflow: "hidden",
+            zIndex: 100
+          }}
+        >
+          <div
+            style={{ padding: 10, cursor: "pointer" }}
+            onClick={() => {
+              setShowProfileModal(true);
+              setShowProfileMenu(false);
+            }}
+          >
+            👥 Manage Profiles
+          </div>
+
+          <div
+            style={{ padding: 10, cursor: "pointer", color: "#ef4444" }}
+            onClick={() => {
+              localStorage.setItem("activeProfile", "default");
+              setProfile(null);
+              setData([]);
+              setShowProfileMenu(false);
+            }}
+          >
+            🚪 Logout
+          </div>
+        </div>
+      )}
+    </div>
+
+  </div>
 </div>
+
 
         {/* DASHBOARD */}
         {view === "dashboard" && (
   <>
-    <h1 style={{ marginBottom: 12, fontWeight: 600 }}>Portfolio Overview</h1>
-
-    <div
-  style={{
-    height: 1,
-    background: theme.border,
-    marginBottom: 16,
-    opacity: 0.5
-  }}
-/>
 
      {/* ✅ EMPTY STATE MESSAGE */}
     {data.length === 0 && (
@@ -1194,79 +1449,60 @@ color: dark ? "#e5e7eb" : "#111827",
       </p>
     )}
 
-    {/* 🔷 TOP BAR */}
-    <div
+{/* 🔷 TOP BAR */}
+<div
   style={{
     display: "flex",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
     marginBottom: 16,
-    flexWrap: "wrap",
-    gap: 12
+    gap: 10,
+    flexWrap: "wrap"
   }}
 >
-  {/* LEFT */}
-  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
 
-    {/* CSV UPLOAD */}
-    <div
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 6,
-        background: theme.card,
-        padding: "12px",
-        borderRadius: 8,
-        border: `2px dashed ${theme.border}`,
-        cursor: "pointer",
-        minWidth: 180
-      }}
-    >
-      <label
-        style={{
-          fontSize: 12,
-          color: "#3b82f6",
-          cursor: "pointer",
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: `1px solid ${theme.border}`,
-          background: theme.bg,
-        }}
-      >
-        Choose File
-        <input
-          type="file"
-          accept=".csv, .xls, .xlsx"
-          onChange={handleFileUpload}
-          style={{ display: "none" }}
-        />
-      </label>
-    </div>
+  {/* IMPORT BUTTON */}
+  <label
+    style={{
+      padding: "6px 12px",
+      borderRadius: 8,
+      border: `1px solid ${theme.border}`,
+      background: theme.card,
+      color: theme.text,
+      fontSize: 12,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }}
+  >
+    ⬆ Import Portfolio
+    <input
+      type="file"
+      accept=".csv, .xls, .xlsx"
+      onChange={handleFileUpload}
+      style={{ display: "none" }}
+    />
+  </label>
 
-  </div>
-
-  {/* RIGHT */}
+  {/* UPDATE BUTTON */}
   <button
     onClick={handleUpdatePrices}
     disabled={updatingPrices}
     style={{
-      padding: "8px 14px",
+      padding: "6px 12px",
       borderRadius: 8,
       background: updatingPrices ? "#1e293b" : "#2563eb",
-      boxShadow: updatingPrices ? "none" : "0 2px 6px rgba(37,99,235,0.3)",
       border: "none",
       color: "#fff",
-      fontSize: 13,
-      fontWeight: 500,
+      fontSize: 12,
       cursor: updatingPrices ? "not-allowed" : "pointer",
-      opacity: updatingPrices ? 0.7 : 1,
+      opacity: updatingPrices ? 0.7 : 1
     }}
   >
-    {updatingPrices ? "⏳ Updating..." : "🔄 Update Prices"}
+    {updatingPrices ? "⏳ Updating..." : "🔄 Update"}
   </button>
+
 </div>
 
     {/* 🔶 PREVIEW PANEL */}
@@ -1292,7 +1528,13 @@ color: dark ? "#e5e7eb" : "#111827",
 
         {/* TABLE */}
         <div style={{ maxHeight: 350, overflowY: "auto", overflowX: "auto" }}>
-        <table className="table" style={{ minWidth: 700 }}>
+        <table
+  className="table"
+  style={{
+    width: "100%",
+    tableLayout: "fixed"
+  }}
+>
             <thead>
   <tr>
     <th style={{ fontWeight: 500, color: theme.subText }}>Status</th>
@@ -1387,7 +1629,7 @@ color: dark ? "#e5e7eb" : "#111827",
             : "#ef4444",
       }}
     >
-      {healthScore} / 100
+      {hasData ? `${healthScore} / 100` : "-"}
     </span>
 
     {/* DOT VISUAL */}
@@ -1419,11 +1661,13 @@ color: dark ? "#e5e7eb" : "#111827",
 
   {/* LABEL */}
   <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
-    {healthScore >= 80
-      ? "Strong portfolio"
-      : healthScore >= 60
-      ? "Balanced portfolio"
-      : "Needs attention"}
+    {!hasData
+  ? "Upload portfolio to see health score"
+  : healthScore >= 80
+  ? "Strong portfolio"
+  : healthScore >= 60
+  ? "Balanced portfolio"
+  : "Needs attention"}
   </div>
 
   {/* WARNINGS */}
@@ -1743,31 +1987,124 @@ color: dark ? "#e5e7eb" : "#111827",
 </div>
 
             {/* TABLE */}
-            <div style={{ overflowX: "auto" }}>
-            <table
-  className="table"
+            <div style={{ overflowX: "auto", maxHeight: "65vh" }}>
+  <table
+    className="table"
+    style={{
+      minWidth: 900,
+      borderCollapse: "collapse"
+    }}
+  >
+              <thead
   style={{
-    minWidth: 900,
+    position: "sticky",
+    top: 0,
+    background: theme.card,
+    zIndex: 5
   }}
 >
-              <thead>
                 <tr>
-                  <th>Stock</th>
-                  <th>Sector</th>
-                  <th>52W Range</th>
-                  <th>Qty</th>
-                  <th>Avg</th>
-                  <th>Price</th>
-                  <th>Value</th>
-                  <th>P&L</th>
-                  <th>%</th>
-                  <th>Action</th>
-                </tr>
+  <th style={{ textAlign: "left", width: 180 }}>Stock</th>
+  <th style={{ textAlign: "left", width: 140 }}>Sector</th>
+  <th style={{ textAlign: "center", width: 160 }}>52W Range</th>
+
+  <th style={{ textAlign: "right", width: 80 }}>Qty</th>
+  <th style={{ textAlign: "right", width: 100 }}>Avg</th>
+  <th style={{ textAlign: "right", width: 100 }}>Price</th>
+
+  {/* SORTABLE VALUE */}
+  <th
+    style={{
+      textAlign: "right",
+      width: 120,
+      cursor: "pointer",
+      opacity: sortKey === "currentValue" ? 1 : 0.7
+    }}
+    onClick={() => {
+      if (sortKey === "currentValue") {
+        setSortDir(sortDir === "asc" ? "desc" : "asc");
+      } else {
+        setSortKey("currentValue");
+        setSortDir("desc");
+      }
+    }}
+  >
+    Value
+    <span style={{ marginLeft: 4, fontSize: 10 }}>
+      {sortKey === "currentValue"
+        ? sortDir === "asc"
+          ? "▲"
+          : "▼"
+        : "⇅"}
+    </span>
+  </th>
+
+  {/* SORTABLE P&L */}
+  <th
+    style={{
+      textAlign: "right",
+      width: 120,
+      cursor: "pointer",
+      opacity: sortKey === "pnl" ? 1 : 0.7
+    }}
+    onClick={() => {
+      if (sortKey === "pnl") {
+        setSortDir(sortDir === "asc" ? "desc" : "asc");
+      } else {
+        setSortKey("pnl");
+        setSortDir("desc");
+      }
+    }}
+  >
+    P&amp;L
+    <span style={{ marginLeft: 4, fontSize: 10 }}>
+      {sortKey === "pnl"
+        ? sortDir === "asc"
+          ? "▲"
+          : "▼"
+        : "⇅"}
+    </span>
+  </th>
+
+  {/* SORTABLE % */}
+  <th
+    style={{
+      textAlign: "right",
+      width: 90,
+      cursor: "pointer",
+      opacity: sortKey === "pnlPct" ? 1 : 0.7
+    }}
+    onClick={() => {
+      if (sortKey === "pnlPct") {
+        setSortDir(sortDir === "asc" ? "desc" : "asc");
+      } else {
+        setSortKey("pnlPct");
+        setSortDir("desc");
+      }
+    }}
+  >
+    %
+    <span style={{ marginLeft: 4, fontSize: 10 }}>
+      {sortKey === "pnlPct"
+        ? sortDir === "asc"
+          ? "▲"
+          : "▼"
+        : "⇅"}
+    </span>
+  </th>
+
+  <th style={{ textAlign: "center", width: 100 }}>Action</th>
+</tr>
               </thead>
 
             <tbody>
-  {cleanData.map((d) => {
-
+  {sortedData
+  .filter((d) =>
+    (d.symbol || "")
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  )
+  .map((d) => {
     const isEditing = editingId === d.symbol;
     const range = d.high52 && d.low52 ? d.high52 - d.low52 : 0;
 
@@ -1779,8 +2116,28 @@ const position =
 const clampedPosition = Math.max(0, Math.min(100, position));
 
     return (
-      <tr key={d.symbol} style={{ borderRadius: 10 }}>
-        <td>
+      <tr
+  key={d.symbol}
+  style={{
+    borderBottom: `1px solid ${theme.border}`,
+    transition: "background 0.2s ease"
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.background = dark ? "#111827" : "#f9fafb";
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.background = "transparent";
+  }}
+>
+ <td
+  style={{
+    width: 180,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    verticalAlign: "top"
+  }}
+>
   {isEditing ? (
     <input
       value={editForm.symbol}
@@ -1794,97 +2151,183 @@ const clampedPosition = Math.max(0, Math.min(100, position));
         background: theme.card,
         color: theme.text,
         fontSize: 12,
-        width: "90px",
+        width: "100%"   // ✅ IMPORTANT (fixes alignment)
       }}
     />
   ) : (
-    d.symbol
+    <div
+      style={{
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }}
+      title={d.symbol} // ✅ shows full name on hover
+    >
+      {d.symbol}
+    </div>
   )}
 </td>
-        <td>{d.sector}</td>
+        <td style={{ width: 140 }}>
+  {d.sector}
+</td>
 
-        <td>
-  {d.high52 && d.low52 ? (
-    <div style={{ width: 120 }}>
-      <div
-        style={{
-          height: 6,
-          borderRadius: 6,
-          background: "#e5e7eb",
-          position: "relative",
-        }}
-      >
+  {/* 📊 52W RANGE */}
+<td style={{ width: 160, textAlign: "center", verticalAlign: "middle" }}>
+  {(() => {
+    const symbol = (d.symbol || "").toLowerCase();
+
+    const isMF =
+      symbol.includes("fund") ||
+      symbol.includes("plan");
+
+    if (isMF) {
+      return (
+        <span style={{ fontSize: 11, color: theme.subText }}>
+          N/A
+        </span>
+      );
+    }
+
+    return (
+      <div style={{ width: 130, margin: "0 auto" }}>
+
+        {/* LOW / HIGH */}
         <div
           style={{
-            position: "absolute",
-            left: `${clampedPosition}%`,
-            top: 0,
-            transform: "translateX(-50%)",
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            background:
-              clampedPosition > 80
-                ? "#22c55e"
-                : clampedPosition < 20
-                ? "#ef4444"
-                : "#3b82f6",
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 9,
+            color: theme.subText,
+            marginBottom: 4
           }}
-        />
-      </div>
+        >
+          <span>₹{d.low52 ?? "-"}</span>
+          <span>₹{d.high52 ?? "-"}</span>
+        </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 10,
-          marginTop: 4,
-          opacity: 0.7,
-        }}
-      >
-        <span>L</span>
-        <span>H</span>
+        {/* BAR */}
+        <div
+          style={{
+            position: "relative",
+            height: 5,
+            borderRadius: 999,
+            background: dark ? "#1f2937" : "#e5e7eb"
+          }}
+        >
+          {/* PROGRESS */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              width: `${
+                d.high52 && d.low52
+                  ? ((d.currentPrice - d.low52) / (d.high52 - d.low52)) * 100
+                  : 0
+              }%`,
+              height: "100%",
+              background: "#3b82f6",
+              opacity: 0.3,
+              borderRadius: 999
+            }}
+          />
+
+          {/* DOT */}
+          <div
+            style={{
+              position: "absolute",
+              left: `${
+                d.high52 && d.low52
+                  ? ((d.currentPrice - d.low52) / (d.high52 - d.low52)) * 100
+                  : 0
+              }%`,
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "#3b82f6",
+              border: dark ? "2px solid #020617" : "2px solid #fff",
+              boxShadow: "0 0 0 2px rgba(59,130,246,0.2)"
+            }}
+          />
+        </div>
+
+        {/* CURRENT PRICE */}
+        <div
+          style={{
+            fontSize: 10,
+            marginTop: 4,
+            fontWeight: 500,
+            color: theme.text
+          }}
+        >
+          ₹{d.currentPrice ?? "-"}
+        </div>
+
       </div>
-    </div>
+    );
+  })()}
+</td>
+
+<td style={{ width: 80, textAlign: "right" }}>
+  {isEditing ? (
+    <input
+      type="number"
+      value={editForm.quantity}
+      onChange={(e) =>
+        setEditForm({ ...editForm, quantity: e.target.value })
+      }
+      style={{
+        width: "100%",   // ✅ important
+        padding: "4px 6px",
+        borderRadius: 4,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 12,
+        textAlign: "right"
+      }}
+    />
   ) : (
-    "-"
+    d.quantity
   )}
 </td>
 
-        <td>
-          {isEditing ? (
-            <input
-              type="number"
-              style={{ width: "80px" }}
-              value={editForm.quantity}
-              onChange={(e) =>
-                setEditForm({ ...editForm, quantity: e.target.value })
-              }
-            />
-          ) : (
-            d.quantity
-          )}
-        </td>
+<td style={{ width: 100, textAlign: "right" }}>
+  {isEditing ? (
+    <input
+      type="number"
+      value={editForm.avgPrice}
+      onChange={(e) =>
+        setEditForm({ ...editForm, avgPrice: e.target.value })
+      }
+      style={{
+        width: "100%",   // ✅ important
+        padding: "4px 6px",
+        borderRadius: 4,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        color: theme.text,
+        fontSize: 12,
+        textAlign: "right"
+      }}
+    />
+  ) : (
+    d.avgPrice
+  )}
+</td>
 
-        <td>
-          {isEditing ? (
-            <input
-              type="number"
-              style={{ width: "80px" }}
-              value={editForm.avgPrice}
-              onChange={(e) =>
-                setEditForm({ ...editForm, avgPrice: e.target.value })
-              }
-            />
-          ) : (
-            d.avgPrice
-          )}
-        </td>
+<td style={{ width: 100, textAlign: "right" }}>
+  {d.currentPrice ? d.currentPrice.toFixed(2) : "-"}
+</td>
 
-        <td>{d.currentPrice ? d.currentPrice.toFixed(2) : "-"}</td>
-        <td>{d.currentValue?.toFixed(0)}</td>
-        
-        <td className={d.pnl > 0 ? "green" : d.pnl < 0 ? "red" : ""}>
+<td style={{ width: 120, textAlign: "right", padding: "10px 8px" }}>
+  {d.currentValue?.toFixed(0)}
+</td>
+
+<td
+  style={{ width: 120, textAlign: "right" }}
+  className={d.pnl > 0 ? "green" : d.pnl < 0 ? "red" : ""}
+>
   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
     ₹{d.pnl?.toFixed(0)}
     {d.pnl !== 0 && (
@@ -1895,7 +2338,10 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   </span>
 </td>
 
-<td className={d.pnlPct > 0 ? "green" : d.pnlPct < 0 ? "red" : ""}>
+<td
+  style={{ width: 90, textAlign: "right" }}
+  className={d.pnlPct > 0 ? "green" : d.pnlPct < 0 ? "red" : ""}
+>
   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
     {isNaN(d.pnlPct)
       ? "0.00%"
@@ -2302,7 +2748,7 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   <Target size={18} strokeWidth={1.5} />
   FIRE Target
 </h3>
-          <h2>₹{futureValue.toLocaleString()}</h2>
+          <h2>{cleanData.length ? `₹${futureValue.toLocaleString()}` : "-"}</h2>
         </div>
 
         <div style={{
@@ -2322,7 +2768,7 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   <TrendingUp size={18} strokeWidth={1.5} />
   Monthly SIP Needed
 </h3>
-          <h2>₹{requiredSip.toLocaleString()}</h2>
+          <h2>{cleanData.length ? `₹${requiredSip.toLocaleString()}` : "-"}</h2>
         </div>
 
         <div style={{
@@ -2343,7 +2789,7 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   Progress
 </h3>
 
-          <h2>{progress.toFixed(1)}%</h2>
+          <h2>{cleanData.length ? `${progress.toFixed(1)}%` : "-"}</h2>
 
           <div style={{
             height: 6,
@@ -2369,94 +2815,132 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   </div>
 )}
 
-    {/* 💡 INSIGHTS */}
+{/* 💡 INSIGHTS */}
 {view === "insights" && (
   <>
     <div className="card" style={{ marginTop: 20 }}>
       <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <Lightbulb size={18} strokeWidth={1.5} />
-  Insights
-</h3>
+        style={{
+          color: theme.text,
+          display: "flex",
+          alignItems: "center",
+          gap: 8
+        }}
+      >
+        <Lightbulb size={18} strokeWidth={1.5} />
+        Insights
+      </h3>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: 16,
-        marginBottom: 20
-      }}>
-        <div style={{
-          padding: 16,
-          borderRadius: 12,
-          background: theme.card,
-          border: `1px solid ${theme.border}`
-        }}>
-          <p style={{ fontSize: 12, color: theme.subText }}>10% Rule</p>
-          <h4 style={{ color: "#22c55e" }}>✅ Within Limit</h4>
+      {!hasData ? (
+        <div
+          style={{
+            padding: 20,
+            textAlign: "center",
+            opacity: 0.7
+          }}
+        >
+          📥 Add holdings to generate insights
         </div>
-      </div>
-
-      <div style={{
-        padding: 16,
-        borderRadius: 12,
-        background: theme.card,
-        border: `1px solid ${theme.border}`
-      }}>
-        <h3
+      ) : (
+        <>
+          {/* 🔹 10% Rule */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 16,
+              marginBottom: 20
+            }}
+          >
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 12,
+                background: theme.card,
+                border: `1px solid ${theme.border}`
+              }}
+            >
+              <p style={{ fontSize: 12, color: theme.subText }}>
+                10% Rule
+              </p>
+              <h4
   style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
+    color: overAllocatedStock ? "#ef4444" : "#22c55e",
   }}
 >
-  <PieChartIcon size={18} strokeWidth={1.5} />
-  Asset Allocation
-</h3>
-
-        {[
-          { label: "Stocks", value: assetTotals.stocks },
-          { label: "Mutual Funds", value: assetTotals.mf },
-          { label: "ETF", value: assetTotals.etf },
-          { label: "SGB", value: assetTotals.sgb }
-        ].map((item) => {
-          const pct = totalValue
-            ? ((item.value / totalValue) * 100).toFixed(1)
-            : 0;
-
-          return (
-            <div key={item.label} style={{ marginBottom: 10 }}>
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 13
-              }}>
-                <span>{item.label}</span>
-                <span>{pct}%</span>
-              </div>
-
-              <div style={{
-                height: 6,
-                background: dark ? "#1f2937" : "#e5e7eb",
-                borderRadius: 6,
-                overflow: "hidden"
-              }}>
-                <div style={{
-                  width: `${pct}%`,
-                  background: "#3b82f6",
-                  height: "100%"
-                }} />
-              </div>
+  {overAllocatedStock
+    ? `⚠️ ${overAllocatedStock.name} (${overAllocatedStock.pct}%) exceeds 10%`
+    : "✅ Within Limit"}
+</h4>
             </div>
-          );
-        })}
-      </div>
+          </div>
+
+          {/* 🔹 Asset Allocation */}
+          <div
+            style={{
+              padding: 16,
+              borderRadius: 12,
+              background: theme.card,
+              border: `1px solid ${theme.border}`
+            }}
+          >
+            <h3
+              style={{
+                color: theme.text,
+                display: "flex",
+                alignItems: "center",
+                gap: 8
+              }}
+            >
+              <PieChartIcon size={18} strokeWidth={1.5} />
+              Asset Allocation
+            </h3>
+
+            {[
+              { label: "Stocks", value: assetTotals.stocks },
+              { label: "Mutual Funds", value: assetTotals.mf },
+              { label: "ETF", value: assetTotals.etf },
+              { label: "SGB", value: assetTotals.sgb }
+            ].map((item) => {
+              const pct = totalValue
+                ? ((item.value / totalValue) * 100).toFixed(1)
+                : 0;
+
+              return (
+                <div key={item.label} style={{ marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 13
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span>{pct}%</span>
+                  </div>
+
+                  <div
+                    style={{
+                      height: 6,
+                      background: dark ? "#1f2937" : "#e5e7eb",
+                      borderRadius: 6,
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${pct}%`,
+                        background: "#3b82f6",
+                        height: "100%"
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   </>
 )}
@@ -2643,8 +3127,6 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     </div>
   </div>
 )}
-
-
       </main>
     </div>
   );
