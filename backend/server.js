@@ -4,6 +4,10 @@ const API_KEY = process.env.API_KEY;
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const cron = require("node-cron");
+
+// 🧠 In-memory events store
+let EVENTS = [];
 
 const app = express();
 app.use(cors({
@@ -252,6 +256,169 @@ pChange =
     console.error("Update error:", err);
     res.status(500).json({ error: "Price update failed" });
   }
+});
+
+// 🔔 FETCH CORPORATE EVENTS FROM NSE
+const fetchCorporateActions = async () => {
+  try {
+    console.log("📡 Fetching NSE corporate announcements...");
+
+    const nse = axios.create({
+      baseURL: "https://www.nseindia.com",
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+        Referer: "https://www.nseindia.com/",
+      },
+      timeout: 5000,
+    });
+
+    // ✅ IMPORTANT: init cookies
+    try {
+      await nse.get("/");
+    } catch {
+      console.log("⚠️ NSE cookie init failed (events)");
+    }
+
+    const res = await nse.get(
+      "/api/corporate-announcements?index=equities"
+    );
+
+    const data = res.data || [];
+    const now = new Date();
+
+// 🔥 helper: clean title
+const getCleanTitle = (type) => {
+  switch (type) {
+    case "DIVIDEND":
+      return "Dividend declared";
+    case "RESULT":
+      return "Results announced";
+    case "MEETING":
+      return "Board meeting update";
+    case "RECORD":
+      return "Record date announced";
+    case "MERGER":
+      return "Merger update";
+    case "DEMERGER":
+      return "Demerger update";
+    case "ACQUISITION":
+      return "Acquisition update";
+    default:
+      return "Corporate update";
+  }
+};
+
+// 🔥 helper: extract record date
+const extractRecordDate = (text) => {
+  const match = text.match(/(\d{1,2}-[A-Za-z]{3}-\d{4})/);
+  return match ? match[1] : null;
+};
+
+// 🔥 STEP 1: Normalize + classify
+const parsed = data.map((item) => {
+  const rawTitle =
+    item.attchmntText ||
+    item.desc ||
+    "";
+
+  const symbol = item.symbol || "";
+  const t = rawTitle.toLowerCase();
+
+  let type = "OTHER";
+
+  if (t.includes("dividend")) type = "DIVIDEND";
+  else if (t.includes("result")) type = "RESULT";
+  else if (t.includes("board meeting")) type = "MEETING";
+  else if (t.includes("record date")) type = "RECORD";
+  else if (t.includes("merger")) type = "MERGER";
+  else if (t.includes("demerger")) type = "DEMERGER";
+  else if (
+    t.includes("acquisition") &&
+    (
+      t.includes("acquired") ||
+      t.includes("acquisition of") ||
+      t.includes("completion of acquisition")
+    )
+  ) {
+    type = "ACQUISITION";
+  }
+
+  const date = item.sort_date
+    ? item.sort_date.split(" ")[0]
+    : null;
+
+  const recordDate = extractRecordDate(rawTitle);
+
+  return {
+    symbol,
+    type,
+    title: getCleanTitle(type), // 🔥 cleaned
+    rawTitle, // keep original if needed later
+    recordDate, // 🔥 extracted
+    date,
+  };
+});
+
+// 🔥 STEP 2: keep only meaningful
+const meaningful = parsed.filter((e) => e.type !== "OTHER");
+
+// 🔥 STEP 3: better dedup (symbol + type + date)
+const map = new Map();
+
+meaningful.forEach((e) => {
+  const key = `${e.symbol}_${e.type}_${e.date}`;
+  map.set(key, e);
+});
+
+const unique = Array.from(map.values());
+
+// 🔥 STEP 4: classify into buckets
+const active = [];
+const archive = [];
+
+unique.forEach((e) => {
+  if (!e.date) return;
+
+  const diff =
+    (now - new Date(e.date)) / (1000 * 60 * 60 * 24);
+
+  if (diff >= 0 && diff <= 7) {
+    active.push(e);
+  } else if (diff > 7 && diff <= 30) {
+    archive.push(e);
+  }
+});
+
+// 🔥 STEP 5: store
+EVENTS = {
+  active: active.slice(0, 20),
+  archive: archive.slice(0, 50),
+};
+
+    console.log(
+      `✅ Events updated: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
+    );
+  } catch (err) {
+    console.error("❌ Events fetch failed:", err.message);
+  }
+};
+
+// ⏰ Run at 9 AM
+cron.schedule("0 9 * * *", fetchCorporateActions);
+
+// ⏰ Run at 6 PM
+cron.schedule("0 18 * * *", fetchCorporateActions);
+
+// 🚀 Run once on server start
+fetchCorporateActions();
+
+app.get("/api/events", (req, res) => {
+  res.json({
+    success: true,
+    active: EVENTS.active || [],
+    archive: EVENTS.archive || [],
+  });
 });
 
 /**

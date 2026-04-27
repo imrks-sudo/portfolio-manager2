@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 import posthog from 'posthog-js';
@@ -13,6 +13,7 @@ import {
   HelpCircle,
   Info,
   Heart,
+  Bell,
   PieChart as PieChartIcon 
 } from "lucide-react";
 
@@ -119,6 +120,13 @@ function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("desc");
+  const [showAlerts, setShowAlerts] = useState(false);
+  const alertRef = useRef(null);
+  const [events, setEvents] = useState({
+  active: [],
+  archive: []
+});
+
   const theme = {
   bg: dark ? "#020617" : "#ffffff",
   card: dark ? "#020617" : "#f9fafb",
@@ -135,6 +143,49 @@ function App() {
     .filter((k) => k.startsWith("portfolio_"))
     .map((k) => k.replace("portfolio_", ""));
   });
+
+useEffect(() => {
+  const handleClickOutside = (event) => {
+    if (
+      alertRef.current &&
+      !alertRef.current.contains(event.target)
+    ) {
+      setShowAlerts(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
+
+useEffect(() => {
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/events`, {
+        headers: {
+          ...(import.meta.env.VITE_API_KEY && {
+            "x-api-key": import.meta.env.VITE_API_KEY,
+          }),
+        },
+      });
+
+      const json = await res.json();
+
+      setEvents({
+        active: json.active || [],
+        archive: json.archive || []
+      });
+
+    } catch (err) {
+      console.error("❌ Events fetch failed", err);
+    }
+  };
+
+  fetchEvents();
+}, []);
 
 useEffect(() => {
   posthog.init('phc_uWKkVjeiNkgXHPDMSugLefet86cAmhQcxkgPdUvi2gdm', {
@@ -161,6 +212,22 @@ const refreshProfiles = () => {
 
   setProfiles(list);
 };
+
+const portfolioSymbols = cleanData.map(d =>
+  d.symbol.replace(/-E$|-GB$/i, "")
+);
+
+const filteredActive = events.active.filter(e =>
+  portfolioSymbols.includes(
+    (e.symbol || "").replace(/-E$|-GB$/i, "")
+  )
+);
+
+const filteredArchive = events.archive.filter(e =>
+  portfolioSymbols.includes(
+    (e.symbol || "").replace(/-E$|-GB$/i, "")
+  )
+);
 
 const handleConfirmUpload = async () => {
   try {
@@ -1373,6 +1440,155 @@ color: "#fff",
         width: 220
       }}
     />
+
+  {/* 🔔 ALERTS */}
+<div style={{ position: "relative" }} ref={alertRef}>
+  {/* 🔔 ICON */}
+  <div
+    onClick={() => setShowAlerts(prev => !prev)}
+    style={{
+      width: 34,
+      height: 34,
+      borderRadius: "50%",
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      position: "relative"
+    }}
+  >
+    <Bell size={18} />
+
+    {/* BADGE */}
+    {filteredActive.length > 0 && (
+      <span
+        style={{
+          position: "absolute",
+          top: -4,
+          right: -4,
+          background: "#ef4444",
+          color: "#fff",
+          fontSize: 10,
+          borderRadius: "50%",
+          padding: "2px 5px"
+        }}
+      >
+        {filteredActive.length}
+      </span>
+    )}
+  </div>
+
+  {/* 🔽 DROPDOWN */}
+{showAlerts && (
+  <div
+    style={{
+      position: "absolute",
+      right: 0,
+      top: 42,
+      width: 300,
+      maxHeight: 320,
+      overflowY: "auto",
+      background: theme.card,
+      border: `1px solid ${theme.border}`,
+      borderRadius: 12,
+      boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+      zIndex: 100
+    }}
+  >
+    <div style={{ padding: 10, fontSize: 12, opacity: 0.7 }}>
+      Updates
+    </div>
+
+    {/* 🔄 LOADING */}
+    {events.active.length === 0 && events.archive.length === 0 ? (
+      <div style={{ padding: 10, fontSize: 12 }}>
+        No recent updates
+      </div>
+    ) : (
+      <>
+        {/* 🟢 ACTIVE */}
+        {filteredActive.length > 0 && (
+          <>
+            <div style={{
+              padding: "6px 10px",
+              fontSize: 11,
+              opacity: 0.6
+            }}>
+              Active
+            </div>
+
+            {filteredActive.map((e, i) => (
+              <div
+                key={`a-${i}`}
+                style={{
+                  padding: 10,
+                  borderTop: `1px solid ${theme.border}`
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>
+                  {e.symbol}
+                </div>
+
+                <div style={{ fontSize: 12 }}>
+                  {e.title}
+                </div>
+
+                <div style={{ fontSize: 11, opacity: 0.6 }}>
+                  📅 {e.date}
+                </div>
+
+                {e.recordDate && (
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>
+                    📌 Record: {e.recordDate}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* 🟡 ARCHIVE */}
+        {filteredArchive.length > 0 && (
+          <>
+            <div style={{
+              padding: "6px 10px",
+              fontSize: 11,
+              opacity: 0.5
+            }}>
+              Archive
+            </div>
+
+            {filteredArchive.map((e, i) => (
+              <div
+                key={`ar-${i}`}
+                style={{
+                  padding: 10,
+                  borderTop: `1px solid ${theme.border}`,
+                  opacity: 0.7
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>
+                  {e.symbol}
+                </div>
+
+                <div style={{ fontSize: 12 }}>
+                  {e.title}
+                </div>
+
+                <div style={{ fontSize: 11, opacity: 0.6 }}>
+                  📅 {e.date}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </>
+    )}
+  </div>
+)} 
+</div>
 
     {/* 👤 PROFILE */}
     <div style={{ position: "relative" }}>
