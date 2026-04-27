@@ -1716,7 +1716,7 @@ color: "#fff",
       opacity: updatingPrices ? 0.7 : 1
     }}
   >
-    {updatingPrices ? "⏳ Updating..." : "🔄 Update"}
+    {updatingPrices ? "⏳ Updating..." : "🔄 Update Price"}
   </button>
 
 </div>
