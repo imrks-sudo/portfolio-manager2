@@ -10,6 +10,7 @@ const cron = require("node-cron");
 let EVENTS = [];
 
 const app = express();
+app.set("trust proxy", 1); // if behind a proxy (e.g. Vercel)
 app.use(cors({
   origin: function (origin, callback) {
     const allowed = [
