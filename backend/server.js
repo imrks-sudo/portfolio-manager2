@@ -8,6 +8,47 @@ const cron = require("node-cron");
 
 // 🧠 In-memory events store
 let EVENTS = [];
+let MF_LIST = [];
+
+const normalizeSymbol = (symbol) =>
+  (symbol || "")
+    .toUpperCase()
+    .replace(/-E$/, "")
+    .replace(/-GB$/, "")
+    .trim();
+
+// 🔔 FETCH AMFI DATA
+const fetchAMFI = async () => {
+  try {
+    console.log("📡 Fetching AMFI data...");
+
+    const res = await axios.get(
+      "https://www.amfiindia.com/spages/NAVAll.txt"
+    );
+
+    const lines = res.data.split("\n");
+
+    const list = [];
+
+    lines.forEach((line) => {
+      const parts = line.split(";");
+
+      if (parts.length > 4 && parts[3] && !isNaN(parts[4])) {
+        list.push({
+          code: parts[0],
+          name: parts[3],
+          nav: parts[4],
+        });
+      }
+    });
+
+    MF_LIST = list;
+
+    console.log(`✅ AMFI loaded: ${MF_LIST.length}`);
+  } catch (err) {
+    console.error("❌ AMFI fetch failed", err.message);
+  }
+};
 
 const app = express();
 app.set("trust proxy", 1); // if behind a proxy (e.g. Vercel)
@@ -61,6 +102,33 @@ const tough = require("tough-cookie");
 
 // ✅ Create cookie jar
 const jar = new tough.CookieJar();
+
+// 🔧 NORMALIZE
+const normalizeMF = (str) =>
+  (str || "")
+    .toLowerCase()
+    .replace(/fund|plan|growth|direct|regular/g, "")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+
+// 🔍 SIMPLE MATCH
+const matchMF = (input) => {
+  const norm = normalizeMF(input);
+
+  const matches = MF_LIST.filter((mf) =>
+    normalizeMF(mf.name).includes(norm)
+  );
+
+  if (matches.length === 1) {
+    return { type: "valid", match: matches[0] };
+  }
+
+  if (matches.length > 1) {
+    return { type: "suggest", matches: matches.slice(0, 5) };
+  }
+
+  return { type: "invalid" };
+};
 
 app.post("/update-prices", async (req, res) => {
   try {
@@ -413,6 +481,7 @@ cron.schedule("0 18 * * *", fetchCorporateActions);
 
 // 🚀 Run once on server start
 fetchCorporateActions();
+fetchAMFI();
 
 app.get("/api/events", (req, res) => {
   res.json({
@@ -420,6 +489,135 @@ app.get("/api/events", (req, res) => {
     active: EVENTS.active || [],
     archive: EVENTS.archive || [],
   });
+});
+
+app.post("/api/validate-upload", async (req, res) => {
+  try {
+    const rows = req.body.rows || [];
+
+    const valid = [];
+    const suggestions = [];
+    const invalid = [];
+
+    const nse = axios.create({
+      baseURL: "https://www.nseindia.com",
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+        Referer: "https://www.nseindia.com/",
+      },
+      timeout: 5000,
+    });
+
+    // ✅ Init cookies
+    try {
+      await nse.get("/");
+    } catch {}
+
+    // 🚀 PARALLEL PROCESSING (faster)
+    await Promise.all(
+      rows.map(async (row) => {
+        const original = (row.symbol || "").toUpperCase();
+        const symbol = normalizeSymbol(original);
+
+        const isMF =
+          symbol.toLowerCase().includes("fund") ||
+          symbol.toLowerCase().includes("plan");
+
+        // =========================
+        // 🔵 MUTUAL FUND
+        // =========================
+        if (isMF) {
+          const result = matchMF(symbol);
+
+          if (result.type === "valid") {
+            valid.push({
+              input: original, // ✅ keep user input
+              type: "MF",
+              final: result.match.name,
+              code: result.match.code,
+              nav: result.match.nav,
+            });
+          } else if (result.type === "suggest") {
+            suggestions.push({
+              input: original,
+              type: "MF",
+              suggested: result.matches.map((m) => m.name),
+            });
+          } else {
+            invalid.push({
+              input: original,
+              type: "MF",
+            });
+          }
+        }
+
+        // =========================
+        // 🟢 STOCK / ETF / SGB
+        // =========================
+        else {
+          let isValid = false;
+
+          // 🔹 Step 1: Equity API
+          try {
+            const resEq = await nse.get(
+              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+            );
+
+            if (resEq.data?.info) {
+              isValid = true;
+            }
+          } catch {}
+
+          // 🔹 Step 2: Fallback (ETF / SGB / others)
+          if (!isValid) {
+            try {
+              const resSearch = await nse.get(
+                `/api/search/autocomplete?q=${encodeURIComponent(symbol)}`
+              );
+
+              const results = resSearch.data?.symbols || [];
+
+              const match = results.find(
+                (r) =>
+                  r.symbol?.toUpperCase() === symbol ||
+                  r.identifier?.toUpperCase() === symbol
+              );
+
+              if (match) {
+                isValid = true;
+              }
+            } catch {}
+          }
+
+          // 🔹 Step 3: Final decision
+          if (isValid) {
+            valid.push({
+              input: original, // ✅ preserve original
+              type: "STOCK",
+              final: symbol,   // normalized
+            });
+          } else {
+            invalid.push({
+              input: original,
+              type: "STOCK",
+            });
+          }
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      valid,
+      suggestions,
+      invalid,
+    });
+
+  } catch (err) {
+    console.error("❌ Validation failed", err.message);
+    res.status(500).json({ error: "Validation failed" });
+  }
 });
 
 /**

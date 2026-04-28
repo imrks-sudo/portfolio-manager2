@@ -77,6 +77,8 @@ body {
   padding: 16px;
   border: 1px solid #e5e7eb;
   color: #111827;
+  overflow-x: auto;
+  overflow: visible;
 }
 
 .app.dark .card {
@@ -114,6 +116,11 @@ h3 {
   font-size: 16px;
   font-weight: 600;
   margin: 4px 0;
+}
+
+/* 🔥 MOST IMPORTANT LINE */
+.card div {
+  min-width: 0;
 }
 
 /* ================= FIRE GRID ================= */
@@ -280,7 +287,15 @@ button:hover {
     display: none;
   }
 
+/* Fix grid overflow issue */
+input {
+  min-width: 0;
+}
+
   .main {
-    padding: 12px;
-  }
+  flex: 1;
+  padding: 16px 20px;
+  min-width: 0; 
+  overflow-x: hidden;  /* 🔥 prevents grid overflow */
+}
 }

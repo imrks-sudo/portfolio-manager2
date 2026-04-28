@@ -70,6 +70,9 @@ const getPortfolioKey = (profile) => {
   return `portfolio_${profile}`;
 };
 
+const normalizeSymbol = (s) =>
+  (s || "").replace(/-E$|-GB$/i, "").toUpperCase();
+
 const loadLocalPortfolio = () => {
   const profile = getActiveProfile();
   if (!profile) return [];
@@ -126,6 +129,13 @@ function App() {
   active: [],
   archive: []
 });
+  const [manualSymbol, setManualSymbol] = useState("");
+  const [manualValidation, setManualValidation] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef = useRef(null);
+  const cacheRef = useRef(new Map());
+  const requestIdRef = useRef(0);
+  const inputRef = useRef(null);
 
   const theme = {
   bg: dark ? "#020617" : "#ffffff",
@@ -151,6 +161,20 @@ useEffect(() => {
       !alertRef.current.contains(event.target)
     ) {
       setShowAlerts(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
+
+useEffect(() => {
+  const handleClickOutside = (e) => {
+    if (!e.target.closest(".symbol-input-wrapper")) {
+      setShowSuggestions(false);
     }
   };
 
@@ -205,6 +229,42 @@ useEffect(() => {
   setData(loadLocalPortfolio());
 };
 
+const handleAdd = () => {
+  const isValid = manualValidation?.valid?.length > 0;
+
+  if (!form.symbol || !form.quantity || !form.avgPrice || !isValid) {
+    alert("❌ Please enter a valid symbol");
+    return;
+  }
+
+  // 🔥 Use validated symbol (VERY IMPORTANT)
+  const finalSymbol =
+    manualValidation.valid[0].final || form.symbol;
+
+  const newItem = {
+    symbol: finalSymbol,
+    quantity: Number(form.quantity),
+    avgPrice: Number(form.avgPrice),
+    sector: form.sector || "-"
+  };
+
+  // 🔥 IMPORTANT: use YOUR state name here
+  // Replace `data` if your state is named differently
+  const updated = [...data, newItem];
+  setData(updated);
+
+  // reset form
+  setForm({
+    symbol: "",
+    quantity: "",
+    avgPrice: "",
+    sector: ""
+  });
+
+  setManualValidation(null);
+  setShowSuggestions(false);
+};
+
 const refreshProfiles = () => {
   const list = Object.keys(localStorage)
     .filter((k) => k.startsWith("portfolio_"))
@@ -214,20 +274,93 @@ const refreshProfiles = () => {
 };
 
 const portfolioSymbols = cleanData.map(d =>
-  d.symbol.replace(/-E$|-GB$/i, "")
+  normalizeSymbol(d.symbol)
 );
 
 const filteredActive = events.active.filter(e =>
   portfolioSymbols.includes(
-    (e.symbol || "").replace(/-E$|-GB$/i, "")
+    normalizeSymbol(e.symbol)
   )
 );
 
 const filteredArchive = events.archive.filter(e =>
   portfolioSymbols.includes(
-    (e.symbol || "").replace(/-E$|-GB$/i, "")
+    normalizeSymbol(e.symbol)
   )
 );
+
+const validateManualSymbol = (symbol) => {
+  if (!symbol || symbol.length < 3) {
+    setManualValidation(null);
+    return;
+  }
+
+  // 🔥 CLEAR PREVIOUS TIMER
+  if (debounceRef.current) {
+    clearTimeout(debounceRef.current);
+  }
+
+  // 🔥 DEBOUNCE (300ms)
+  debounceRef.current = setTimeout(async () => {
+
+    // 🔥 CACHE CHECK
+    const key = normalizeSymbol(symbol);
+    if (cacheRef.current.has(key)) {
+    setManualValidation(cacheRef.current.get(key));
+    setShowSuggestions(true);
+    return;
+  }
+
+    const requestId = ++requestIdRef.current;
+
+    try {
+      const res = await fetch(`${API_URL}/api/validate-upload`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(import.meta.env.VITE_API_KEY && {
+            "x-api-key": import.meta.env.VITE_API_KEY,
+          }),
+        },
+        body: JSON.stringify({
+          rows: [{ symbol }],
+        }),
+      });
+
+      const json = await res.json();
+
+      // 🛑 IGNORE OLD RESPONSES
+      if (requestId !== requestIdRef.current) return;
+
+      // 🔥 CACHE RESULT
+      if (cacheRef.current.size > 100) {
+  cacheRef.current.clear();
+}
+
+      // 🔥 AUTO FIX (ONLY SAFE CASE)
+      if (
+  json.suggestions?.length === 1 &&
+  json.suggestions[0]?.suggested?.length === 1 &&
+  !json.valid?.length
+) {
+         const suggested = json.suggestions[0].suggested[0];
+
+setForm(prev => ({
+...prev,
+symbol: suggested
+}));
+      }
+
+      setManualValidation(json);
+      setShowSuggestions(true);
+
+    } catch (err) {
+      console.error("❌ Manual validation failed", err);
+    }
+
+  }, 300);
+};
+
 
 const handleConfirmUpload = async () => {
   try {
@@ -247,8 +380,20 @@ const handleConfirmUpload = async () => {
     // ✅ MERGE INSTEAD OF REPLACE
     const map = new Map();
 
-    cleanData.forEach(d => map.set(d.symbol, d));
-    enriched.forEach(d => map.set(d.symbol, d));
+   cleanData.forEach(d =>
+   map.set(normalizeSymbol(d.symbol), d)
+ );
+
+ enriched.forEach(d => {
+   const finalSymbol = normalizeSymbol(
+     d.finalSymbol || d.symbol
+   );
+
+   map.set(finalSymbol, {
+     ...d,
+     symbol: finalSymbol
+   });
+ });
 
     const merged = Array.from(map.values());
 
@@ -632,7 +777,7 @@ useEffect(() => {
     setUpdatingPrices(true);
 
     const symbols = data.map((d) =>
-    d.symbol.replace(/-E$|-GB$/i, "")
+    normalizeSymbol(d.symbol)
   );
 
     const res = await fetch(`${API_URL}/update-prices`, {
@@ -654,18 +799,18 @@ useEffect(() => {
   const backendData = json.data || [];
 
   const priceMap = new Map(
-  backendData.map(p => [
-    p.symbol.replace(/-E$|-GB$/i, ""),
+backendData.map(p => [
+   normalizeSymbol(p.symbol),
     p
   ])
-);
+ );
 
   const prevPrices = new Map(
   data.map((d) => [d.symbol, d.currentPrice || 0])
 );
 
 const updated = data.map((item) => {
-  const key = item.symbol.replace(/-E$|-GB$/i, "");
+  const key = normalizeSymbol(item.symbol);
   const match = priceMap.get(key);
 
   if (!match) return item;
@@ -855,8 +1000,55 @@ const handleParsedData = async (results) => {
       return;
     }
 
-    setPreviewData(cleaned);
-    setShowPreview(true);
+    // 🔔 CALL VALIDATION API
+const res = await fetch(`${API_URL}/api/validate-upload`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    ...(import.meta.env.VITE_API_KEY && {
+      "x-api-key": import.meta.env.VITE_API_KEY,
+    }),
+  },
+  body: JSON.stringify({
+    rows: cleaned.map((r) => ({
+      symbol: r.symbol,
+    })),
+  }),
+});
+
+const json = await res.json();
+
+// 🔥 attach validation result to rows
+const enriched = cleaned.map((row) => {
+ 
+const inputSymbol = normalizeSymbol(row.symbol);
+
+const v = json.valid.find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+ );
+
+ const s = json.suggestions.find(
+   (x) => normalizeSymbol(x.input) === inputSymbol
+ );
+
+ const i = json.invalid.find(
+   (x) => normalizeSymbol(x.input) === inputSymbol
+ );
+
+  return {
+    ...row,
+    status: v
+      ? "valid"
+      : s
+      ? "suggest"
+      : "invalid",
+    suggestions: s?.suggested || [],
+    finalSymbol: v?.final || row.symbol,
+  };
+});
+
+setPreviewData(enriched);
+setShowPreview(true);
 
   } catch (err) {
     console.error("❌ Upload failed:", err);
@@ -1732,7 +1924,7 @@ color: "#fff",
         {/* SUMMARY */}
         <div style={{
           display: "flex",
-          gap: 12,
+          gap: 16,
           flexWrap: "wrap",
           marginBottom: 12,
           fontSize: 13
@@ -1740,6 +1932,18 @@ color: "#fff",
           <span style={{ color: "#22c55e" }}>🟢 New: {summary.new}</span>
           <span style={{ color: "#3b82f6" }}>🔵 Updated: {summary.updated}</span>
           <span style={{ color: "#ef4444" }}>🔴 Removed: {summary.removed}</span>
+            {/* 🔥 NEW VALIDATION SUMMARY */}
+  <span style={{ color: "#16a34a" }}>
+    ✔ Valid: {previewData.filter(r => r.status === "valid").length}
+  </span>
+
+  <span style={{ color: "#f59e0b" }}>
+    ⚠ Review: {previewData.filter(r => r.status === "suggest").length}
+  </span>
+
+  <span style={{ color: "#dc2626" }}>
+    ❌ Invalid: {previewData.filter(r => r.status === "invalid").length}
+    </span>
         </div>
 
         {/* TABLE */}
@@ -1755,28 +1959,218 @@ color: "#fff",
   <tr>
     <th style={{ fontWeight: 500, color: theme.subText }}>Status</th>
     <th style={{ fontWeight: 500, color: theme.subText }}>Symbol</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Validation</th>
     <th style={{ fontWeight: 500, color: theme.subText }}>Qty</th>
     <th style={{ fontWeight: 500, color: theme.subText }}>Avg Price</th>
     <th style={{ fontWeight: 500, color: theme.subText }}>Sector</th>
+    <th style={{ fontWeight: 500, color: theme.subText }}>Action</th>
   </tr>
 </thead>
 
-            <tbody>
-              {diffData.map((row, i) => (
-                <tr key={i}>
-                  <td>
-                    {row.type === "NEW" && "🟢 New"}
-                    {row.type === "UPDATED" && "🔵 Updated"}
-                    {row.type === "SAME" && "⚪ Same"}
-                    {row.type === "REMOVED" && "🔴 Removed"}
-                  </td>
-                  <td>{row.symbol}</td>
-                  <td>{row.quantity}</td>
-                  <td>{row.avgPrice}</td>
-                  <td>{row.sector || "-"}</td>
-                </tr>
+<tbody>
+  {previewData.map((row, i) => (
+    <tr key={i}>
+
+      {/* STATUS */}
+      <td>
+        {row.status === "valid" && "🟢 Valid"}
+        {row.status === "suggest" && "⚠️ Check"}
+        {row.status === "invalid" && "❌ Invalid"}
+      </td>
+
+      {/* SYMBOL */}
+      <td>
+  {row.isEditing ? (
+    <input
+      value={row.symbol}
+      onChange={(e) => {
+        const updated = [...previewData];
+        updated[i].symbol = e.target.value.toUpperCase();
+        setPreviewData(updated);
+      }}
+    />
+  ) : (
+    row.symbol
+  )}
+</td>
+
+      {/* VALIDATION (simple text only) */}
+      <td>
+        {row.status === "valid" && (
+          <span style={{ color: "#22c55e", fontSize: 12 }}>OK</span>
+        )}
+
+        {row.status === "invalid" && (
+          <span style={{ color: "#ef4444", fontSize: 12 }}>
+            Not supported
+          </span>
+        )}
+
+        {row.status === "suggest" && (
+          <span style={{ color: "#f59e0b", fontSize: 12 }}>
+            Needs selection
+          </span>
+        )}
+      </td>
+
+      {/* QTY */}
+      <td>{row.quantity}</td>
+
+      {/* AVG */}
+      <td>{row.avgPrice}</td>
+
+      {/* SECTOR */}
+      <td>{row.sector || "-"}</td>
+
+      {/* ACTIONS */}
+      <td>
+         {/* ✏️ EDIT BUTTON */}
+  <button
+  onClick={async () => {
+    const updated = [...previewData];
+
+    // 👉 If currently editing → SAVE
+    if (row.isEditing) {
+      try {
+        const res = await fetch(`${API_URL}/api/validate-upload`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(import.meta.env.VITE_API_KEY && {
+              "x-api-key": import.meta.env.VITE_API_KEY,
+            }),
+          },
+          body: JSON.stringify({
+            rows: [{ symbol: updated[i].symbol }],
+          }),
+        });
+
+        const json = await res.json();
+
+        // 🔥 apply validation result
+
+        const inputSymbol = normalizeSymbol(updated[i].symbol);
+
+const v = json.valid.find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
+        const s = json.suggestions.find(
+ (x) => normalizeSymbol(x.input) === inputSymbol
+);
+
+ const inv = json.invalid.find(
+   (x) => normalizeSymbol(x.input) === inputSymbol
+ );
+
+        if (v) {
+          updated[i].status = "valid";
+          updated[i].symbol = v.final;
+          updated[i].suggestions = [];
+        } else if (s) {
+          updated[i].status = "suggest";
+          updated[i].suggestions = s.suggested;
+        } else if (inv) {
+          updated[i].status = "invalid";
+        }
+      } catch (err) {
+        console.error("❌ Re-validation failed", err);
+      }
+    }
+
+    // toggle edit mode
+    updated[i].isEditing = !updated[i].isEditing;
+
+    setPreviewData(updated);
+  }}
+  style={{
+    marginRight: 6,
+    padding: "4px 8px",
+    fontSize: 11
+  }}
+>
+  {row.isEditing ? "Save" : "Edit"}
+</button>
+
+        {/* 🔥 MF / SUGGESTION SELECT */}
+        {row.status === "suggest" && row.suggestions.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          
+          <div style={{ fontSize: 10, opacity: 0.6 }}>
+      Select correct scheme
+    </div>
+
+            <select
+              value={row.selectedSuggestion || ""}
+              onChange={(e) => {
+                const updated = [...previewData];
+                updated[i].selectedSuggestion = e.target.value;
+                setPreviewData(updated);
+              }}
+              style={{
+                padding: 4,
+                fontSize: 11,
+                borderRadius: 4
+              }}
+            >
+              <option value="">Select</option>
+              {row.suggestions.map((s, idx) => (
+                <option key={idx} value={s}>
+                  {s}
+                </option>
               ))}
-            </tbody>
+            </select>
+
+            <button
+              onClick={() => {
+                if (!row.selectedSuggestion) {
+                  alert("Please select a value first");
+                  return;
+                }
+
+                const updated = [...previewData];
+                if (!row.selectedSuggestion) {
+  alert("Please select a fund first");
+  return;
+}
+
+updated[i].symbol = row.selectedSuggestion;
+updated[i].status = "valid";
+updated[i].suggestions = [];
+updated[i].selectedSuggestion = "";
+
+                setPreviewData(updated);
+              }}
+              style={{
+                padding: "4px 8px",
+                fontSize: 11
+              }}
+            >
+              Replace
+            </button>
+          </div>
+        )}
+
+        {/* REMOVE */}
+        <button
+          onClick={() => {
+            const updated = previewData.filter((_, idx) => idx !== i);
+            setPreviewData(updated);
+          }}
+          style={{
+            background: "#ef4444",
+            marginTop: 6,
+            padding: "4px 8px",
+            fontSize: 11
+          }}
+        >
+          Remove
+        </button>
+
+      </td>
+
+    </tr>
+  ))}
+</tbody>
           </table>
         </div>
 
@@ -1804,17 +2198,30 @@ color: "#fff",
           </button>
 
           <button
-            onClick={handleConfirmUpload}
-            style={{
-  padding: "6px 12px",
-  borderRadius: 6,
-  background: "#3b82f6",
-  border: "none",
-  color: "#fff"
-}}
-          >
-            Confirm Upload
-          </button>
+  onClick={() => {
+    const hasIssues = previewData.some(
+      (r) => r.status !== "valid"
+    );
+
+    if (hasIssues) {
+      alert("⚠️ Please fix invalid/suggested rows before upload");
+      return;
+    }
+
+    handleConfirmUpload();
+  }}
+  style={{
+    padding: "6px 12px",
+    borderRadius: 6,
+    background: "#3b82f6",
+    border: "none",
+    color: "#fff",
+    cursor: "pointer",
+    opacity: previewData.some((r) => r.status !== "valid") ? 0.6 : 1
+  }}
+>
+  Confirm Upload
+</button>
         </div>
       </div>
     )}
@@ -2072,133 +2479,192 @@ color: "#fff",
 </div>
 
 {/* ADD HOLDING */}
-<div className="card" style={{ marginTop: 20, padding: 16 }}>
-  <h3 style={{ color: theme.text, marginBottom: 10 }}>Add Holding</h3>
+<div
+  className="card"
+  style={{
+    marginBottom: 20,
+    padding: 16,
+    border: `1px solid ${theme.border}`,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
+    overflow: "visible"
+  }}
+>
+  <h3 style={{ color: theme.text, marginBottom: 12 }}>
+    Add Holding
+  </h3>
 
   <div
     style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-      gap: 10,
+      display: "flex",
+      gap: 12,
       alignItems: "center",
+      width: "100%"
     }}
   >
-    <input
-      placeholder="Symbol"
-      value={form.symbol}
-      onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 8,
-        border: `1px solid ${theme.border}`,
-        background: theme.card,
-        color: theme.text,
-        fontSize: 13,
-      }}
-    />
 
+    {/* 🔹 SYMBOL INPUT */}
+    <div
+      style={{
+        flex: 2,
+        position: "relative",
+        minWidth: 0,
+        display: "flex"  
+      }}
+    >
+      <input
+        placeholder="Symbol / MF / ETF / SGB"
+        value={form.symbol}
+        onChange={(e) => {
+          const val = e.target.value.toUpperCase();
+          setForm({ ...form, symbol: val });
+          setManualSymbol(val);
+          validateManualSymbol(val);
+        }}
+        style={{
+          flex: 1,             
+      minWidth: 0,          
+      width: "auto",
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: `1px solid ${theme.border}`,
+          background: theme.card,
+          color: theme.text,
+          fontSize: 13
+        }}
+      />
+
+      {/* 🔽 AUTOCOMPLETE DROPDOWN */}
+      {showSuggestions && manualValidation && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 8,
+            marginTop: 4,
+            zIndex: 9999,
+            maxHeight: 220,
+            overflowY: "auto",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.3)"
+          }}
+        >
+          {manualValidation.valid?.length > 0 && (
+            <div style={{ padding: 8, fontSize: 12, color: "#22c55e" }}>
+              ✔ Valid: {manualValidation?.valid?.[0]?.final}
+            </div>
+          )}
+
+          {(() => {
+            const suggestions =
+              manualValidation?.suggestions?.[0]?.suggested || [];
+
+            if (!suggestions.length) return null;
+
+            return suggestions.map((s, i) => (
+              <div
+                key={i}
+                onClick={() => {
+                  setForm({ ...form, symbol: s });
+                  setManualSymbol(s);
+                  setShowSuggestions(false);
+                }}
+                style={{
+                  padding: 8,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  borderTop: `1px solid ${theme.border}`
+                }}
+              >
+                👉 {s}
+              </div>
+            ));
+          })()}
+
+          {manualValidation.invalid?.length > 0 && (
+            <div style={{ padding: 8, fontSize: 12, color: "#ef4444" }}>
+              ❌ Not supported
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
+    {/* 🔹 QUANTITY */}
     <input
       placeholder="Quantity"
-      type="number"
       value={form.quantity}
-      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+      onChange={(e) =>
+        setForm({ ...form, quantity: e.target.value })
+      }
       style={{
+        flex: 1,
         padding: "8px 10px",
         borderRadius: 8,
         border: `1px solid ${theme.border}`,
         background: theme.card,
         color: theme.text,
         fontSize: 13,
+        minWidth: 0
       }}
     />
 
+    {/* 🔹 AVG PRICE */}
     <input
       placeholder="Avg Price"
-      type="number"
       value={form.avgPrice}
-      onChange={(e) => setForm({ ...form, avgPrice: e.target.value })}
+      onChange={(e) =>
+        setForm({ ...form, avgPrice: e.target.value })
+      }
       style={{
+        flex: 1,
         padding: "8px 10px",
         borderRadius: 8,
         border: `1px solid ${theme.border}`,
         background: theme.card,
         color: theme.text,
         fontSize: 13,
+        minWidth: 0
       }}
     />
 
+    {/* 🔹 SECTOR */}
     <input
       placeholder="Sector"
       value={form.sector}
-      onChange={(e) => setForm({ ...form, sector: e.target.value })}
+      onChange={(e) =>
+        setForm({ ...form, sector: e.target.value })
+      }
       style={{
+        flex: 1,
         padding: "8px 10px",
         borderRadius: 8,
         border: `1px solid ${theme.border}`,
         background: theme.card,
         color: theme.text,
         fontSize: 13,
+        minWidth: 0
       }}
     />
 
-    {/* ADD BUTTON */}
+    {/* 🔹 ADD BUTTON */}
     <button
-      onClick={async () => {
-        posthog.capture('holding_added');
-        if (!form.symbol || !form.quantity || !form.avgPrice) return;
-
-        const newItem = {
-          symbol: form.symbol.trim().toUpperCase(),
-          quantity: Number(form.quantity),
-          avgPrice: Number(form.avgPrice),
-          sector: form.sector || "Others",
-        };
-
-        const exists = data.find(
-          (item) => item.symbol === newItem.symbol
-        );
-
-        let updated;
-
-        if (exists) {
-          updated = data.map((item) =>
-            item.symbol === newItem.symbol
-              ? {
-                  ...item,
-                  quantity: item.quantity + newItem.quantity,
-                  avgPrice: newItem.avgPrice,
-                }
-              : item
-          );
-        } else {
-          updated = [...data, newItem];
-        }
-
-        setData(updated);
-        saveLocalPortfolio(updated);
-        refreshProfiles();
-
-        setForm({
-          symbol: "",
-          quantity: "",
-          avgPrice: "",
-          sector: "",
-        });
-      }}
+      onClick={handleAdd}
       style={{
-        padding: "8px 12px",
+        flexShrink: 0,
+        padding: "8px 14px",
         borderRadius: 8,
         background: "#2563eb",
-        border: "none",
         color: "#fff",
+        border: "none",
         cursor: "pointer",
-        fontSize: 13,
-        fontWeight: 500,
-        height: "36px",
+        whiteSpace: "nowrap"
       }}
     >
-      ➕ Add
+      + Add
     </button>
+
   </div>
 </div>
 
