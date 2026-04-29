@@ -230,39 +230,58 @@ useEffect(() => {
 };
 
 const handleAdd = () => {
-  const isValid = manualValidation?.valid?.length > 0;
-
-  if (!form.symbol || !form.quantity || !form.avgPrice || !isValid) {
-    alert("❌ Please enter a valid symbol");
+  if (!form.symbol || !form.quantity || !form.avgPrice) {
+    alert("Symbol, Quantity and Avg Price are required");
     return;
   }
 
-  // 🔥 Use validated symbol (VERY IMPORTANT)
-  const finalSymbol =
-    manualValidation.valid[0].final || form.symbol;
+  const symbol = normalizeSymbol(form.symbol);
+  const qty = Number(form.quantity);
+  const avg = Number(form.avgPrice);
 
-  const newItem = {
-    symbol: finalSymbol,
-    quantity: Number(form.quantity),
-    avgPrice: Number(form.avgPrice),
-    sector: form.sector || "-"
-  };
+  setData(prev => {
+    const existing = prev.find(
+      d => normalizeSymbol(d.symbol) === symbol
+    );
 
-  // 🔥 IMPORTANT: use YOUR state name here
-  // Replace `data` if your state is named differently
-  const updated = [...data, newItem];
-  setData(updated);
+    if (!existing) {
+      return [
+        ...prev,
+        {
+          symbol,
+          quantity: qty,
+          avgPrice: avg,
+          sector: form.sector || "-"
+        }
+      ];
+    }
 
-  // reset form
+    // merge logic
+    const totalQty = existing.quantity + qty;
+
+    const totalInvestment =
+      existing.quantity * existing.avgPrice +
+      qty * avg;
+
+    const newAvg = totalInvestment / totalQty;
+
+    return prev.map(d =>
+      normalizeSymbol(d.symbol) === symbol
+        ? {
+            ...d,
+            quantity: totalQty,
+            avgPrice: Number(newAvg.toFixed(2))
+          }
+        : d
+    );
+  });
+
   setForm({
     symbol: "",
     quantity: "",
     avgPrice: "",
     sector: ""
   });
-
-  setManualValidation(null);
-  setShowSuggestions(false);
 };
 
 const refreshProfiles = () => {
@@ -385,15 +404,54 @@ const handleConfirmUpload = async () => {
  );
 
  enriched.forEach(d => {
-   const finalSymbol = normalizeSymbol(
-     d.finalSymbol || d.symbol
-   );
+ 
+const finalSymbol = normalizeSymbol(d.symbol);
+const existing = map.get(finalSymbol);
 
-   map.set(finalSymbol, {
-     ...d,
-     symbol: finalSymbol
-   });
- });
+  // 🆕 NEW ENTRY
+  if (!existing) {
+    map.set(finalSymbol, {
+      ...d,
+      symbol: finalSymbol
+    });
+    return;
+  }
+
+  const action = d.action;
+
+  // 🔴 SKIP
+  if (action === "skip") {
+    return;
+  }
+
+  // 🔵 REPLACE
+  if (action === "replace") {
+    map.set(finalSymbol, {
+      ...d,
+      symbol: finalSymbol
+    });
+    return;
+  }
+
+  // 🟢 MERGE
+  if (action === "merge") {
+    const totalQty =
+      existing.quantity + d.quantity;
+
+    const totalInvestment =
+      existing.quantity * existing.avgPrice +
+      d.quantity * d.avgPrice;
+
+    const newAvg =
+      totalQty > 0 ? totalInvestment / totalQty : 0;
+
+    map.set(finalSymbol, {
+      ...existing,
+      quantity: totalQty,
+      avgPrice: Number(newAvg.toFixed(2))
+    });
+  }
+});
 
     const merged = Array.from(map.values());
 
@@ -401,8 +459,9 @@ const handleConfirmUpload = async () => {
     saveLocalPortfolio(merged);
     refreshProfiles();
 
-    setShowPreview(false);
     setPreviewData([]);
+    setShowPreview(false);
+    
 
     alert(`✅ Portfolio updated (${enriched.length} items)`);
   } catch (err) {
@@ -413,34 +472,36 @@ const handleConfirmUpload = async () => {
 
 const getDiffData = () => {
   const currentMap = new Map(
-    data.map((d) => [d.symbol, d])
-  );
+  data.map((d) => [normalizeSymbol(d.symbol), d])
+);
 
-  const previewMap = new Map(
-    previewData.map((d) => [d.symbol, d])
-  );
+const previewMap = new Map(
+  previewData.map((d) => [normalizeSymbol(d.symbol), d])
+);
 
   const diff = [];
 
   // NEW + UPDATED + SAME
-  previewData.forEach((p) => {
-    const existing = currentMap.get(p.symbol);
+ previewData.forEach((p) => {
+  const existing = currentMap.get(normalizeSymbol(p.symbol));
 
-    if (!existing) {
-      diff.push({ ...p, type: "NEW" });
-    } else if (
-      existing.quantity !== p.quantity ||
-      existing.avgPrice !== p.avgPrice
-    ) {
-      diff.push({ ...p, type: "UPDATED" });
-    } else {
-      diff.push({ ...p, type: "SAME" });
-    }
-  });
+  let type = "SAME";   // 🔥 ADD THIS LINE
+
+  if (!existing) {
+    type = "NEW";
+    } else if (p.action === "merge" || p.action === "replace") {
+  type = "UPDATED";
+}
+    else if (p.action === "skip") {
+    type = "SAME";
+  }
+
+  diff.push({ ...p, type });
+});
 
   // REMOVED
   cleanData.forEach((d) => {
-    if (!previewMap.has(d.symbol)) {
+    if (!previewMap.has(normalizeSymbol(d.symbol))) {
       diff.push({
         symbol: d.symbol,
         quantity: d.quantity,
@@ -1020,6 +1081,10 @@ const json = await res.json();
 
 // 🔥 attach validation result to rows
 const enriched = cleaned.map((row) => {
+
+const existing = cleanData.find(
+     d => normalizeSymbol(d.symbol) === normalizeSymbol(row.symbol)
+ );
  
 const inputSymbol = normalizeSymbol(row.symbol);
 
@@ -1044,6 +1109,9 @@ const v = json.valid.find(
       : "invalid",
     suggestions: s?.suggested || [],
     finalSymbol: v?.final || row.symbol,
+
+    isDuplicate: !!existing,
+    action: existing ? null : "new"
   };
 });
 
@@ -1103,6 +1171,7 @@ const handleFileUpload = (e) => {
   };
 
   reader.readAsArrayBuffer(file);
+  e.target.value = null;
 };
 
   const chartData = data.map((d) => ({
@@ -1980,32 +2049,30 @@ color: "#fff",
 
       {/* SYMBOL */}
       <td>
-  {row.isEditing ? (
-    <input
-      value={row.symbol}
-      onChange={(e) => {
-        const updated = [...previewData];
-        updated[i].symbol = e.target.value.toUpperCase();
-        setPreviewData(updated);
-      }}
-    />
-  ) : (
-    row.symbol
-  )}
-</td>
+        {row.isEditing ? (
+          <input
+            value={row.symbol}
+            onChange={(e) => {
+              const updated = [...previewData];
+              updated[i].symbol = e.target.value.toUpperCase();
+              setPreviewData(updated);
+            }}
+          />
+        ) : (
+          row.symbol
+        )}
+      </td>
 
-      {/* VALIDATION (simple text only) */}
+      {/* VALIDATION */}
       <td>
         {row.status === "valid" && (
           <span style={{ color: "#22c55e", fontSize: 12 }}>OK</span>
         )}
-
         {row.status === "invalid" && (
           <span style={{ color: "#ef4444", fontSize: 12 }}>
             Not supported
           </span>
         )}
-
         {row.status === "suggest" && (
           <span style={{ color: "#f59e0b", fontSize: 12 }}>
             Needs selection
@@ -2024,80 +2091,84 @@ color: "#fff",
 
       {/* ACTIONS */}
       <td>
-         {/* ✏️ EDIT BUTTON */}
-  <button
-  onClick={async () => {
-    const updated = [...previewData];
 
-    // 👉 If currently editing → SAVE
-    if (row.isEditing) {
-      try {
-        const res = await fetch(`${API_URL}/api/validate-upload`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(import.meta.env.VITE_API_KEY && {
-              "x-api-key": import.meta.env.VITE_API_KEY,
-            }),
-          },
-          body: JSON.stringify({
-            rows: [{ symbol: updated[i].symbol }],
-          }),
-        });
+        {/* ✏️ EDIT */}
+        <button
+          onClick={async () => {
+            const updated = [...previewData];
 
-        const json = await res.json();
+            if (row.isEditing) {
+              try {
+                const res = await fetch(`${API_URL}/api/validate-upload`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    rows: [{ symbol: updated[i].symbol }],
+                  }),
+                });
 
-        // 🔥 apply validation result
+                const json = await res.json();
+                const inputSymbol = normalizeSymbol(updated[i].symbol);
 
-        const inputSymbol = normalizeSymbol(updated[i].symbol);
+                const v = json.valid.find(
+                  (x) => normalizeSymbol(x.input) === inputSymbol
+                );
+                const s = json.suggestions.find(
+                  (x) => normalizeSymbol(x.input) === inputSymbol
+                );
+                const inv = json.invalid.find(
+                  (x) => normalizeSymbol(x.input) === inputSymbol
+                );
 
-const v = json.valid.find(
-  (x) => normalizeSymbol(x.input) === inputSymbol
-);
-        const s = json.suggestions.find(
- (x) => normalizeSymbol(x.input) === inputSymbol
-);
+                if (v) {
+                  const newSymbol = v.final;
 
- const inv = json.invalid.find(
-   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+                  const existing = cleanData.find(
+                    (d) =>
+                      normalizeSymbol(d.symbol) ===
+                      normalizeSymbol(newSymbol)
+                  );
 
-        if (v) {
-          updated[i].status = "valid";
-          updated[i].symbol = v.final;
-          updated[i].suggestions = [];
-        } else if (s) {
-          updated[i].status = "suggest";
-          updated[i].suggestions = s.suggested;
-        } else if (inv) {
-          updated[i].status = "invalid";
-        }
-      } catch (err) {
-        console.error("❌ Re-validation failed", err);
-      }
-    }
+                  updated[i] = {
+                    ...updated[i],
+                    symbol: newSymbol,
+                    finalSymbol: newSymbol,
+                    status: "valid",
+                    suggestions: [],
+                    isDuplicate: !!existing,
+                    action: existing ? null : "new",
+                  };
 
-    // toggle edit mode
-    updated[i].isEditing = !updated[i].isEditing;
+                } else if (s) {
+                  updated[i].status = "suggest";
+                  updated[i].suggestions = s.suggested;
 
-    setPreviewData(updated);
-  }}
-  style={{
-    marginRight: 6,
-    padding: "4px 8px",
-    fontSize: 11
-  }}
->
-  {row.isEditing ? "Save" : "Edit"}
-</button>
+                } else if (inv) {
+                  updated[i].status = "invalid";
+                }
 
-        {/* 🔥 MF / SUGGESTION SELECT */}
+              } catch (err) {
+                console.error("❌ Re-validation failed", err);
+              }
+            }
+
+            updated[i].isEditing = !updated[i].isEditing;
+            setPreviewData(updated);
+          }}
+          style={{ marginRight: 6, padding: "4px 8px", fontSize: 11 }}
+        >
+          {row.isEditing ? "Save" : "Edit"}
+        </button>
+
+        {/* 🔽 SUGGESTIONS */}
         {row.status === "suggest" && row.suggestions.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          
-          <div style={{ fontSize: 10, opacity: 0.6 }}>
-      Select correct scheme
-    </div>
+
+            <div style={{ fontSize: 10, opacity: 0.6 }}>
+              Select correct scheme
+            </div>
 
             <select
               value={row.selectedSuggestion || ""}
@@ -2106,20 +2177,14 @@ const v = json.valid.find(
                 updated[i].selectedSuggestion = e.target.value;
                 setPreviewData(updated);
               }}
-              style={{
-                padding: 4,
-                fontSize: 11,
-                borderRadius: 4
-              }}
             >
               <option value="">Select</option>
               {row.suggestions.map((s, idx) => (
-                <option key={idx} value={s}>
-                  {s}
-                </option>
+                <option key={idx} value={s}>{s}</option>
               ))}
             </select>
 
+            {/* ✅ FIXED REPLACE */}
             <button
               onClick={() => {
                 if (!row.selectedSuggestion) {
@@ -2127,22 +2192,30 @@ const v = json.valid.find(
                   return;
                 }
 
-                const updated = [...previewData];
-                if (!row.selectedSuggestion) {
-  alert("Please select a fund first");
-  return;
-}
+                const newSymbol = row.selectedSuggestion.toUpperCase();
 
-updated[i].symbol = row.selectedSuggestion;
-updated[i].status = "valid";
-updated[i].suggestions = [];
-updated[i].selectedSuggestion = "";
+                setPreviewData(prev => {
+                  const updated = [...prev];
 
-                setPreviewData(updated);
-              }}
-              style={{
-                padding: "4px 8px",
-                fontSize: 11
+                  const existing = cleanData.find(
+                    (d) =>
+                      normalizeSymbol(d.symbol) ===
+                      normalizeSymbol(newSymbol)
+                  );
+
+                  updated[i] = {
+                    ...updated[i],
+                    symbol: newSymbol,
+                    finalSymbol: newSymbol,
+                    status: "valid",
+                    suggestions: [],
+                    selectedSuggestion: "",
+                    isDuplicate: !!existing,
+                    action: existing ? null : "new",
+                  };
+
+                  return updated;
+                });
               }}
             >
               Replace
@@ -2150,21 +2223,142 @@ updated[i].selectedSuggestion = "";
           </div>
         )}
 
+        {/* 🔥 DUPLICATE ACTIONS */}
+      {row.isDuplicate && (
+  <div style={{ marginTop: 6 }}>
+
+    {/* MERGE */}
+    <button
+      onClick={() => {
+        setPreviewData(prev => {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], action: "merge" };
+          return updated;
+        });
+      }}
+      style={{
+        background: row.action === "merge" ? "#2563eb" : "#374151",
+        color: "#fff",
+        marginRight: 6,
+        padding: "4px 8px",
+        fontSize: 11,
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer"
+      }}
+    >
+      Merge
+    </button>
+
+    {/* REPLACE */}
+    <button
+      onClick={() => {
+        setPreviewData(prev => {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], action: "replace" };
+          return updated;
+        });
+      }}
+      style={{
+        background: row.action === "replace" ? "#2563eb" : "#374151",
+        color: "#fff",
+        marginRight: 6,
+        padding: "4px 8px",
+        fontSize: 11,
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer"
+      }}
+    >
+      Replace
+    </button>
+
+    {/* SKIP */}
+    <button
+      onClick={() => {
+        setPreviewData(prev => {
+          const updated = [...prev];
+          updated[i] = { ...updated[i], action: "skip" };
+          return updated;
+        });
+      }}
+      style={{
+        background: row.action === "skip" ? "#2563eb" : "#374151",
+        color: "#fff",
+        padding: "4px 8px",
+        fontSize: 11,
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer"
+      }}
+    >
+      Skip
+    </button>
+
+    {/* ACTION LABEL */}
+    <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>
+      Action: <b>{row.action || "None"}</b>
+    </div>
+
+  </div>
+)}
+
         {/* REMOVE */}
         <button
           onClick={() => {
-            const updated = previewData.filter((_, idx) => idx !== i);
-            setPreviewData(updated);
+            setPreviewData(prev =>
+              prev.filter((_, idx) => idx !== i)
+            );
           }}
-          style={{
-            background: "#ef4444",
-            marginTop: 6,
-            padding: "4px 8px",
-            fontSize: 11
-          }}
+          style={{ background: "#ef4444", marginTop: 6 }}
         >
           Remove
         </button>
+
+        {/* 🔥 FINAL PREVIEW */}
+        {row.isDuplicate && row.action && row.action !== "skip" && (() => {
+
+          const existing = cleanData.find(
+            (d) =>
+              normalizeSymbol(d.symbol) ===
+              normalizeSymbol(row.symbol)
+          );
+
+          if (!existing) return null;
+
+          let finalQty = existing.quantity;
+          let finalAvg = existing.avgPrice;
+
+          if (row.action === "merge") {
+            const totalQty = existing.quantity + row.quantity;
+
+            const totalInvestment =
+              existing.quantity * existing.avgPrice +
+              row.quantity * row.avgPrice;
+
+            finalQty = totalQty;
+            finalAvg = totalInvestment / totalQty;
+          }
+
+          if (row.action === "replace") {
+            finalQty = row.quantity;
+            finalAvg = row.avgPrice;
+          }
+
+          return (
+            <div style={{
+              marginTop: 6,
+              fontSize: 11,
+              padding: 6,
+              borderRadius: 6,
+              background: "rgba(59,130,246,0.1)"
+            }}>
+              <div>Final Qty: <b>{finalQty}</b></div>
+              <div>Final Avg: <b>₹{finalAvg.toFixed(2)}</b></div>
+            </div>
+          );
+
+        })()}
 
       </td>
 
@@ -2200,8 +2394,10 @@ updated[i].selectedSuggestion = "";
           <button
   onClick={() => {
     const hasIssues = previewData.some(
-      (r) => r.status !== "valid"
-    );
+  (r) =>
+    r.status !== "valid" ||
+    (r.isDuplicate && !r.action)
+);
 
     if (hasIssues) {
       alert("⚠️ Please fix invalid/suggested rows before upload");
