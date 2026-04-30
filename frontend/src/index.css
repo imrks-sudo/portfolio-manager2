@@ -31,7 +31,7 @@ body {
 }
 
 .app.dark .sidebar {
-  background: #020617;
+  background: inherit;
   border-color: #1f2937;
 }
 
@@ -72,7 +72,7 @@ body {
 
 /* ================= CARDS ================= */
 .card {
-  background: #020617;
+  background: inherit;
   border-radius: 12px;
   padding: 10px 12px;
 
@@ -94,7 +94,7 @@ body {
 }
 
 .app.dark .card {
-  background: #020617;
+  background: inherit;
   border-color: #1f2937;
   color: #e5e7eb;
 }
@@ -239,7 +239,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .app.dark .table tr {
-  background: #020617;
+  background: inherit;
 }
 
 .table td, .table th {
@@ -272,7 +272,7 @@ select {
 
 .app.dark input,
 .app.dark select {
-  background: #020617;
+  background: inherit;
   border-color: #1f2937;
   color: white;
 }
