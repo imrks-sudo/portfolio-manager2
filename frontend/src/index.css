@@ -72,9 +72,17 @@ body {
 
 /* ================= CARDS ================= */
 .card {
-  background: inherit;
+  background: var(--card-bg, #ffffff);
   border-radius: 12px;
   padding: 10px 12px;
+
+.app {
+  --card-bg: #ffffff;
+}
+
+.app.dark {
+  --card-bg: #020617;
+}
 
   /* 🔥 softer border instead of harsh */
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -94,7 +102,7 @@ body {
 }
 
 .app.dark .card {
-  background: inherit;
+   background: #020617;  
   border-color: #1f2937;
   color: #e5e7eb;
 }
@@ -272,7 +280,7 @@ select {
 
 .app.dark input,
 .app.dark select {
-  background: inherit;
+   background: #020617;  
   border-color: #1f2937;
   color: white;
 }
@@ -346,4 +354,26 @@ input {
   min-width: 0; 
   overflow-x: hidden;  /* 🔥 prevents grid overflow */
 }
+}
+
+/* 🔥 FORCE LIGHT */
+.suggestions {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+/* 🔥 FORCE DARK */
+.app.dark .suggestions {
+  background: #020617 !important;
+  color: #e5e7eb !important;
+  border: 1px solid #1f2937 !important;
+}
+
+.app.dark .suggestion-item {
+  color: #e5e7eb !important;
+}
+
+.app.dark .suggestion-item:hover {
+  background: #1e293b !important;
 }

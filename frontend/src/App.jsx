@@ -43,9 +43,8 @@ const getActiveProfile = () => {
   let profile = localStorage.getItem(PROFILE_KEY);
 
   if (!profile) {
-    profile = "default";   // 👈 KEY FIX
-    localStorage.setItem(PROFILE_KEY, profile);
-  }
+  return null;
+}
 
   return profile;
 };
@@ -148,6 +147,16 @@ function App() {
   const cacheRef = useRef(new Map());
   const requestIdRef = useRef(0);
   const inputRef = useRef(null);
+  const [niftyPct, setNiftyPct] = useState(null);
+
+  useEffect(() => {
+  const loadNifty = async () => {
+    const val = await fetchNiftyChange();
+    setNiftyPct(val);
+  };
+
+  loadNifty();
+}, []);
 
   const theme = {
   bg: dark ? "#020617" : "#ffffff",
@@ -156,6 +165,34 @@ function App() {
   text: dark ? "#e5e7eb" : "#111827",
   subText: dark ? "#9ca3af" : "#6b7280",
 };
+
+const fetchNiftyChange = async () => {
+  try {
+    const res = await fetch(
+  "https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=5d&interval=1d"
+ );
+
+    const data = await res.json();
+
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+
+    const closes = result.indicators.quote[0].close.filter(Boolean);
+
+    if (closes.length < 2) return null;
+
+    const prev = closes[closes.length - 2];
+    const curr = closes[closes.length - 1];
+
+    const pct = ((curr - prev) / prev) * 100;
+
+    return Number(pct.toFixed(2));
+  } catch (err) {
+    console.error("NIFTY fetch failed:", err);
+    return null;
+  }
+};
+
   const [view, setView] = useState("dashboard");
 
   const [previewData, setPreviewData] = useState([]);
@@ -228,17 +265,18 @@ useEffect(() => {
     api_host: 'https://app.posthog.com',
   });
 
-  const profile = getActiveProfile() || "guest";
+  const active = getActiveProfile() || "guest";
 
-  posthog.identify(profile);
+  posthog.identify(profile || "guest");
 
   posthog.capture('app_opened');
-}, []);
+}, [profile]);
 
   const switchProfile = (newProfile) => {
   setActiveProfile(newProfile);
   setProfile(newProfile);
   setData(loadLocalPortfolio());
+  refreshProfiles(); 
 };
 
 const handleAdd = () => {
@@ -430,6 +468,10 @@ const existing = map.get(finalSymbol);
   }
 
   const action = d.action;
+  if (existing && !action) {
+   console.warn("Duplicate without action:", d.symbol);
+   return;
+ }
 
   // 🔴 SKIP
   if (action === "skip") {
@@ -508,7 +550,11 @@ const previewMap = new Map(
     type = "SAME";
   }
 
-  diff.push({ ...p, type });
+  diff.push({
+  ...p,
+  symbol: normalizeSymbol(p.symbol),
+  type
+});
 });
 
   // REMOVED
@@ -708,10 +754,10 @@ cleanData.forEach((d) => {
     (healthSectorMap[sector] || 0) + (d.currentValue || 0);
 });
 
-const maxSectorValue = Math.max(
-  ...Object.values(healthSectorMap),
-  0
-);
+const sectorValues = Object.values(healthSectorMap);
+const maxSectorValue = sectorValues.length
+  ? Math.max(...sectorValues)
+  : 0;
 
 let sectorScore = 100;
 if (totalValue > 0 && maxSectorValue / totalValue > 0.5) {
@@ -800,6 +846,7 @@ cleanData.forEach((d) => {
   }
 });
 
+
   // FIRE CALC
 useEffect(() => {
   // ✅ FIX: no portfolio → reset everything
@@ -877,7 +924,7 @@ useEffect(() => {
   const backendData = json.data || [];
 
   const priceMap = new Map(
-backendData.map(p => [
+  backendData.map(p => [
    normalizeSymbol(p.symbol),
     p
   ])
@@ -894,7 +941,7 @@ const updated = data.map((item) => {
   if (!match) return item;
 
   const currentPrice = Number(match.currentPrice || 0);
-  const prevPrice = prevPrices.get(item.symbol);
+  prevPrices.get(normalizeSymbol(item.symbol))
 
 // 🔥 DAILY CHANGE CALCULATION (FIXED)
   const dailyChange = Number(match.change || 0);
@@ -927,6 +974,9 @@ const updated = data.map((item) => {
     saveLocalPortfolio(updated);
     refreshProfiles();
     setLastUpdated(new Date());
+
+    const nifty = await fetchNiftyChange();
+    setNiftyPct(nifty);
 
     alert("✅ Prices updated successfully");
 
@@ -1320,8 +1370,8 @@ if (!profile) {
             padding: "10px 12px",
             borderRadius: 8,
             border: `1px solid ${theme.border}`,
-            background: "#3b82f6",
-color: "#fff",
+            background: theme.card,
+color: theme.text,
             marginBottom: 12
           }}
           onKeyDown={(e) => {
@@ -1640,7 +1690,14 @@ color: "#fff",
                 if (!confirm(`Delete "${p}"?`)) return;
 
                 localStorage.removeItem(`portfolio_${p}`);
-                refreshProfiles();
+
+if (p === profile) {
+  localStorage.removeItem("activeProfile");
+  setProfile(null);
+  setData([]);
+}
+
+refreshProfiles();
               }}
               style={{
                 color: "#ef4444",
@@ -1668,12 +1725,18 @@ color: "#fff",
 
           const trimmed = name.trim();
 
-          setActiveProfile(trimmed);
-          setProfile(trimmed);
-          saveLocalPortfolio([]);
-          setData([]);
+if (!trimmed) return;
 
-          refreshProfiles();
+if (profiles.includes(trimmed)) {
+  alert("Profile already exists");
+  return;
+}
+
+setActiveProfile(trimmed);
+setProfile(trimmed);
+saveLocalPortfolio([]);
+setData([]);
+refreshProfiles();
           setShowProfileModal(false);
         }}
       >
@@ -1917,7 +1980,7 @@ color: "#fff",
           <div
             style={{ padding: 10, cursor: "pointer", color: "#ef4444" }}
             onClick={() => {
-              localStorage.setItem("activeProfile", "default");
+              localStorage.removeItem("activeProfile");
               setProfile(null);
               setData([]);
               setShowProfileMenu(false);
@@ -2600,14 +2663,24 @@ color: "#fff",
         {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
       </p>
 
-      <span style={{ fontSize: 11, opacity: 0.7 }}>
-        vs yesterday: {todayPct.toFixed(2)}%
-      </span>
+     <span style={{ fontSize: 11, opacity: 0.7 }}>
+  Portfolio: {todayPct.toFixed(2)}% today
+</span>
 
-      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
-        vs NIFTY: +0.8% →{" "}
-        {todayPct >= 0.8 ? "Outperforming" : "Underperforming"}
-      </div>
+{lastUpdated && niftyPct !== null && (
+  <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+    NIFTY: {niftyPct > 0 ? "+" : ""}
+    {niftyPct.toFixed(2)}% →{" "}
+    {todayPct >= niftyPct ? "Outperforming" : "Underperforming"}
+  </div>
+)}
+
+{/* ✅ STEP 5 — Loading fallback */}
+{lastUpdated && niftyPct === null && (
+  <div style={{ fontSize: 11, opacity: 0.5, marginTop: 4 }}>
+    Fetching market data...
+  </div>
+)}
 
       <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4 }}>
         {lastUpdated
@@ -2851,20 +2924,20 @@ color: "#fff",
       {/* 🔽 AUTOCOMPLETE DROPDOWN */}
       {showSuggestions && manualValidation && (
         <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            background: theme.card,
-            border: `1px solid ${theme.border}`,
-            borderRadius: 8,
-            marginTop: 4,
-            zIndex: 9999,
-            maxHeight: 220,
-            overflowY: "auto",
-            boxShadow: "0 10px 25px rgba(0,0,0,0.3)"
-          }}
-        >
+  className="suggestions"
+  style={{
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    width: "100%",
+    zIndex: 9999,
+    marginTop: 4,
+    maxHeight: 220,
+    overflowY: "auto",
+    borderRadius: 8,
+    boxShadow: "0 10px 25px rgba(0,0,0,0.3)"
+  }}
+>
           {manualValidation.valid?.length > 0 && (
             <div style={{ padding: 8, fontSize: 12, color: "#22c55e" }}>
               ✔ Valid: {manualValidation?.valid?.[0]?.final}
