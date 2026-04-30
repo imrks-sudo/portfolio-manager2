@@ -56,6 +56,18 @@ const getAllProfiles = () => {
     .map((k) => k.replace("portfolio_", ""));
 };
 
+const getGreeting = () => {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good Morning ☀️";
+  if (hour < 17) return "Good Afternoon 🌤️";
+  return "Good Evening 🌙";
+};
+
+const formatCurrency = (num) =>
+  `₹${Math.abs(num).toLocaleString("en-IN")}`;
+
+
 const setActiveProfile = (name) => {
   localStorage.setItem(PROFILE_KEY, name);
 
@@ -241,8 +253,8 @@ const handleAdd = () => {
 
   setData(prev => {
     const existing = prev.find(
-      d => normalizeSymbol(d.symbol) === symbol
-    );
+  d => normalizeSymbol(d.symbol) === normalizeSymbol(symbol)
+);
 
     if (!existing) {
       return [
@@ -668,6 +680,11 @@ const sorted = [...stockOnly].sort(
 
 const topGainer = sorted[0];
 const topLoser = sorted[sorted.length - 1];
+
+const todayText =
+  totalToday >= 0
+    ? `Your portfolio is up ₹${Math.abs(totalToday).toLocaleString()} today 🚀`
+    : `Your portfolio is down ₹${Math.abs(totalToday).toLocaleString()} today 📉`;
 
 
 // 🧠 PORTFOLIO HEALTH SCORE
@@ -1550,12 +1567,13 @@ color: "#fff",
 
   {/* LEFT */}
   <div>
-    <h2 style={{ margin: 0, fontWeight: 600 }}>
-      Hello, {profile} 👋
-    </h2>
-    <div style={{ fontSize: 12, opacity: 0.7 }}>
-      Here's your portfolio overview
-    </div>
+    <h2 style={{ marginBottom: 4 }}>
+  {getGreeting()}, {profile} 👋
+</h2>
+
+<p style={{ opacity: 0.7, fontSize: 13 }}>
+  {todayText}
+</p>
   </div>
 
   {showProfileModal && (
@@ -2480,199 +2498,300 @@ color: "#fff",
 
   {/* LABEL */}
   <div style={{ fontSize: 12, opacity: 0.8, marginTop: 4 }}>
-    {!hasData
-  ? "Upload portfolio to see health score"
-  : healthScore >= 80
-  ? "Strong portfolio"
-  : healthScore >= 60
-  ? "Balanced portfolio"
-  : "Needs attention"}
-  </div>
-
-  {/* WARNINGS */}
-  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
-    {maxWeight > 0.4 && (
-      <div style={{ color: "#f59e0b" }}>
-        ⚠️ One stock dominates your portfolio
-      </div>
-    )}
-
-    {totalValue > 0 && maxSectorValue / totalValue > 0.5 && (
-      <div style={{ color: "#f59e0b" }}>
-        ⚠️ High sector concentration
-      </div>
-    )}
-
-    {lossStocks > cleanData.length / 2 && (
-      <div style={{ color: "#ef4444" }}>
-        ⚠️ Majority of stocks are in loss
-      </div>
-    )}
-  </div>
+  {!hasData
+    ? "Upload portfolio to see health score"
+    : healthScore >= 80
+    ? "Strong portfolio"
+    : healthScore >= 60
+    ? "Balanced portfolio"
+    : "Needs attention"}
 </div>
 
-{/* 🔶 TODAY + TOP MOVERS */}
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 14,
-    marginBottom: 16,
-  }}
->
-  {/* TODAY */}
-  <div
-    className="card"
-    style={{
-      padding: 16,
-      borderRadius: 14,
-      border: `1px solid ${theme.border}`,
-    }}
-  >
-    <h3 style={{ color: theme.subText }}>Today</h3>
+{/* 🔥 CONFIDENCE INDICATORS */}
+<div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
+  {!hasData ? null : (
+    <>
+      <div>
+        → Diversification:{" "}
+        <b>
+          {maxWeight < 0.25
+            ? "Good"
+            : maxWeight < 0.4
+            ? "Moderate"
+            : "High Risk"}
+        </b>
+      </div>
 
-    <p
-      className={
-        totalToday > 0 ? "green" : totalToday < 0 ? "red" : ""
-      }
-      style={{ fontSize: 18, fontWeight: 600 }}
-    >
-      ₹{totalToday.toLocaleString()}{" "}
-      {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
-    </p>
-
-    <span style={{ fontSize: 12, opacity: 0.8 }}>
-      {todayPct.toFixed(2)}%
-    </span>
-
-    {/* ⏱ TIMESTAMP */}
-    <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
-      {lastUpdated
-        ? `Updated at ${lastUpdated.toLocaleTimeString()}`
-        : "Not updated yet"}
-    </div>
-  </div>
-
-  {/* TOP GAINER */}
-  {topGainer && (
-    <div className="card" style={{ padding: 16, borderRadius: 14 }}>
-      <h3 style={{ color: theme.subText }}>Top Gainer</h3>
-
-      <p style={{ fontWeight: 600 }}>
-        {topGainer.symbol}
-      </p>
-
-      <span className="green" style={{ fontSize: 12 }}>
-        ₹{(topGainer.dailyChange * topGainer.quantity)?.toFixed(0)} ▲ (
-        {topGainer.dailyPct?.toFixed(2)}%)
-      </span>
-    </div>
-  )}
-
-  {/* TOP LOSER */}
-  {topLoser && (
-    <div className="card" style={{ padding: 16, borderRadius: 14 }}>
-      <h3 style={{ color: theme.subText }}>Top Loser</h3>
-
-      <p style={{ fontWeight: 600 }}>
-        {topLoser.symbol}
-      </p>
-
-      <span className="red" style={{ fontSize: 12 }}>
-        ₹{(topLoser.dailyChange * topLoser.quantity)?.toFixed(0)} ▼ (
-        {topLoser.dailyPct?.toFixed(2)}%)
-      </span>
-    </div>
+      <div>
+        → Risk:{" "}
+        <b>
+          {lossStocks === 0
+            ? "Low"
+            : lossStocks < cleanData.length / 2
+            ? "Medium"
+            : "High"}
+        </b>
+      </div>
+    </>
   )}
 </div>
 
-    {/* 🔷 KPI CARDS */}
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 14,
-    marginBottom: 20,
-  }}
->
-  {/* Investment */}
+{/* WARNINGS */}
+<div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>
+  {maxWeight > 0.4 && (
+    <div style={{ color: "#f59e0b" }}>
+      ⚠️ One stock dominates your portfolio
+    </div>
+  )}
+
+  {totalValue > 0 && maxSectorValue / totalValue > 0.5 && (
+    <div style={{ color: "#f59e0b" }}>
+      ⚠️ High sector concentration
+    </div>
+  )}
+
+  {lossStocks > cleanData.length / 2 && (
+    <div style={{ color: "#ef4444" }}>
+      ⚠️ Majority of stocks are in loss
+    </div>
+  )}
+</div>
+</div>
+
+{/* 🔶 TODAY SECTION */}
+<div style={{ marginBottom: 16 }}>
   <div
-    className="card"
     style={{
-      background: theme.card,
-      border: `1px solid ${theme.border}`,
-      padding: 18,
-      borderRadius: 14,
-      transition: "all 0.2s ease",
+      fontSize: 11,
+      opacity: 0.6,
+      marginBottom: 8,
+      letterSpacing: 1,
     }}
   >
-    <h3 style={{ color: theme.subText }}>Investment</h3>
-    <p style={{ fontSize: 18, fontWeight: 600 }}>
-      ₹
-      {totalInvestment.toLocaleString(undefined, {
-        maximumFractionDigits: 0,
-      })}
-    </p>
+    TODAY
   </div>
 
-  {/* Value */}
   <div
-    className="card"
     style={{
-      background: theme.card,
-      border: `1px solid ${theme.border}`,
-      padding: 18,
-      borderRadius: 14,
-      transition: "all 0.2s ease",
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+      gap: 12,
     }}
   >
-    <h3 style={{ color: theme.subText }}>Value</h3>
-    <p style={{ fontSize: 18, fontWeight: 600 }}>
-      ₹{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-    </p>
-  </div>
-
-  {/* P&L */}
-  <div
-    className="card"
-    style={{
-      background: theme.card,
-      border: `1px solid ${theme.border}`,
-      padding: 18,
-      borderRadius: 14,
-      transition: "all 0.2s ease",
-    }}
-  >
-    <h3 style={{ color: theme.subText }}>P&L</h3>
-    <p
-      className={totalPnL > 0 ? "green" : totalPnL < 0 ? "red" : ""}
-      style={{ fontSize: 18, fontWeight: 600 }}
+    {/* TODAY */}
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+      }}
     >
-      ₹{totalPnL.toLocaleString()} {totalPnL > 0 ? "▲" : totalPnL < 0 ? "▼" : ""}
-    </p>
-  </div>
+      <h3 style={{ color: theme.subText, fontSize: 12 }}>Today</h3>
 
-  {/* P&L % */}
-  <div
-    className="card"
-    style={{
-      background: theme.card,
-      border: `1px solid ${theme.border}`,
-      padding: 18,
-      borderRadius: 14,
-      transition: "all 0.2s ease",
-    }}
-  >
-    <h3 style={{ color: theme.subText }}>P&L (%)</h3>
-    <p
-      className={totalPnLPct > 0 ? "green" : totalPnLPct < 0 ? "red" : ""}
-      style={{ fontSize: 18, fontWeight: 600 }}
-    >
-      {totalPnLPct.toFixed(2)}%{" "}
-      {totalPnLPct > 0 ? "▲" : totalPnLPct < 0 ? "▼" : ""}
-    </p>
+      <p
+        className={
+          totalToday > 0 ? "green" : totalToday < 0 ? "red" : ""
+        }
+        style={{ fontSize: 16, fontWeight: 600 }}
+      >
+        ₹{totalToday.toLocaleString()}{" "}
+        {totalToday > 0 ? "▲" : totalToday < 0 ? "▼" : ""}
+      </p>
+
+      <span style={{ fontSize: 11, opacity: 0.7 }}>
+        vs yesterday: {todayPct.toFixed(2)}%
+      </span>
+
+      <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+        vs NIFTY: +0.8% →{" "}
+        {todayPct >= 0.8 ? "Outperforming" : "Underperforming"}
+      </div>
+
+      <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4 }}>
+        {lastUpdated
+          ? `Updated at ${lastUpdated.toLocaleTimeString()}`
+          : "Not updated yet"}
+      </div>
+    </div>
+
+    {/* TOP GAINER */}
+    {topGainer && (
+      <div
+        className="card"
+        style={{
+          padding: 12,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: theme.card,
+        }}
+      >
+        <h3 style={{ color: theme.subText, fontSize: 12 }}>
+          Top Gainer
+        </h3>
+
+        <p style={{ fontWeight: 600 }}>
+          {topGainer.symbol}
+        </p>
+
+        <span className="green" style={{ fontSize: 11 }}>
+          ₹
+          {(topGainer.dailyChange * topGainer.quantity)?.toFixed(
+            0
+          )}{" "}
+          ▲ ({topGainer.dailyPct?.toFixed(2)}%)
+        </span>
+      </div>
+    )}
+
+    {/* TOP LOSER */}
+    {topLoser && (
+      <div
+        className="card"
+        style={{
+          padding: 12,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: theme.card,
+        }}
+      >
+        <h3 style={{ color: theme.subText, fontSize: 12 }}>
+          Top Loser
+        </h3>
+
+        <p style={{ fontWeight: 600 }}>
+          {topLoser.symbol}
+        </p>
+
+        <span className="red" style={{ fontSize: 11 }}>
+          ₹
+          {(topLoser.dailyChange * topLoser.quantity)?.toFixed(
+            0
+          )}{" "}
+          ▼ ({topLoser.dailyPct?.toFixed(2)}%)
+        </span>
+      </div>
+    )}
   </div>
 </div>
+
+{/* 🔷 PORTFOLIO SECTION */}
+<div style={{ marginBottom: 20 }}>
+  <div
+    style={{
+      fontSize: 11,
+      opacity: 0.6,
+      marginBottom: 8,
+      letterSpacing: 1,
+    }}
+  >
+    PORTFOLIO
+  </div>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+      gap: 12,
+    }}
+  >
+    {/* Investment */}
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+      }}
+    >
+      <h3 style={{ color: theme.subText, fontSize: 11 }}>
+        Investment
+      </h3>
+      <p style={{ fontSize: 16, fontWeight: 600 }}>
+        ₹
+        {totalInvestment.toLocaleString(undefined, {
+          maximumFractionDigits: 0,
+        })}
+      </p>
+    </div>
+
+    {/* Value */}
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+      }}
+    >
+      <h3 style={{ color: theme.subText, fontSize: 11 }}>
+        Value
+      </h3>
+      <p style={{ fontSize: 16, fontWeight: 600 }}>
+        ₹
+        {totalValue.toLocaleString(undefined, {
+          maximumFractionDigits: 0,
+        })}
+      </p>
+    </div>
+
+    {/* P&L */}
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+      }}
+    >
+      <h3 style={{ color: theme.subText, fontSize: 11 }}>
+        P&L
+      </h3>
+      <p
+        className={
+          totalPnL > 0 ? "green" : totalPnL < 0 ? "red" : ""
+        }
+        style={{ fontSize: 16, fontWeight: 600 }}
+      >
+        ₹{totalPnL.toLocaleString()}{" "}
+        {totalPnL > 0 ? "▲" : totalPnL < 0 ? "▼" : ""}
+      </p>
+    </div>
+
+    {/* P&L % */}
+    <div
+      className="card"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+      }}
+    >
+      <h3 style={{ color: theme.subText, fontSize: 11 }}>
+        P&L (%)
+      </h3>
+      <p
+        className={
+          totalPnLPct > 0
+            ? "green"
+            : totalPnLPct < 0
+            ? "red"
+            : ""
+        }
+        style={{ fontSize: 16, fontWeight: 600 }}
+      >
+        {totalPnLPct.toFixed(2)}%{" "}
+        {totalPnLPct > 0 ? "▲" : totalPnLPct < 0 ? "▼" : ""}
+      </p>
+    </div>
+  </div>
+</div>
+
 
 {/* ADD HOLDING */}
 <div

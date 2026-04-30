@@ -72,13 +72,25 @@ body {
 
 /* ================= CARDS ================= */
 .card {
-  background: #ffffff;
+  background: #020617;
   border-radius: 12px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  color: #111827;
-  overflow-x: auto;
-  overflow: visible;
+  padding: 10px 12px;
+
+  /* 🔥 softer border instead of harsh */
+  border: 1px solid rgba(255, 255, 255, 0.06);
+
+  /* ❌ remove heavy default shadow */
+  box-shadow: none;
+
+  /* smooth interactions */
+  transition: all 0.2s ease;
+}
+
+/* 🔥 subtle hover (not always active) */
+.card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
 
 .app.dark .card {
@@ -87,11 +99,47 @@ body {
   color: #e5e7eb;
 }
 
-.card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+.card h3 {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.6;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+  line-height: 1.2;
 }
 
+.card p {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0; /* 🔥 remove extra vertical space */
+  line-height: 1.3;
+}
+
+.card span {
+  font-size: 10px;
+  opacity: 0.7;
+  line-height: 1.2;
+}
+
+.card.compact {
+  padding: 12px;
+}
+
+.card > * + * {
+  margin-top: 4px; /* 🔥 controls spacing between elements */
+}
+
+
+.section {
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
 /* ================= FLEX ================= */
 .flex {
   display: flex;
