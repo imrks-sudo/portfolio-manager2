@@ -286,7 +286,33 @@ useEffect(() => {
   refreshProfiles(); 
 };
 
-const handleAdd = () => {
+// 🔥 SYMBOL VALIDATION
+const validateSymbol = async (symbol) => {
+  try {
+    const res = await fetch(`${API_URL}/api/validate-upload`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(import.meta.env.VITE_API_KEY && {
+          "x-api-key": import.meta.env.VITE_API_KEY,
+        }),
+      },
+      body: JSON.stringify({
+        rows: [{ symbol }],
+      }),
+    });
+
+    const json = await res.json();
+
+    return json.valid?.length > 0;
+  } catch (err) {
+    console.error("Validation failed", err);
+    return false;
+  }
+};
+
+// 🔥 ADD HOLDING
+const handleAdd = async () => {
   const rawSymbol = form.symbol?.trim();
 
   if (!rawSymbol) {
@@ -308,9 +334,24 @@ const handleAdd = () => {
     return;
   }
 
-  setData(prev => {
+  // 🔥 VALIDATE SYMBOL
+  let isValid = false;
+
+  try {
+    isValid = await validateSymbol(symbol);
+  } catch {
+    isValid = false;
+  }
+
+  if (!isValid) {
+    alert("❌ Unsupported or invalid symbol");
+    return;
+  }
+
+  // 🔥 UPDATE STATE
+  setData((prev) => {
     const existing = prev.find(
-      d => normalizeSymbol(d.symbol) === symbol
+      (d) => normalizeSymbol(d.symbol) === symbol
     );
 
     let updated;
@@ -322,8 +363,8 @@ const handleAdd = () => {
           symbol,
           quantity: qty,
           avgPrice: avg,
-          sector: form.sector || "-"
-        }
+          sector: form.sector || "-",
+        },
       ];
     } else {
       const totalQty = existing.quantity + qty;
@@ -334,12 +375,12 @@ const handleAdd = () => {
 
       const newAvg = totalInvestment / totalQty;
 
-      updated = prev.map(d =>
+      updated = prev.map((d) =>
         normalizeSymbol(d.symbol) === symbol
           ? {
               ...d,
               quantity: totalQty,
-              avgPrice: Number(newAvg.toFixed(2))
+              avgPrice: Number(newAvg.toFixed(2)),
             }
           : d
       );
@@ -352,11 +393,12 @@ const handleAdd = () => {
     return updated;
   });
 
+  // 🔥 RESET FORM
   setForm({
     symbol: "",
     quantity: "",
     avgPrice: "",
-    sector: ""
+    sector: "",
   });
 };
 
