@@ -158,6 +158,11 @@ function App() {
   loadNifty();
 }, []);
 
+useEffect(() => {
+  const saved = loadLocalPortfolio();
+  if (saved) setData(saved);
+}, []);
+
   const theme = {
   bg: dark ? "#020617" : "#ffffff",
   card: dark ? "#020617" : "#f9fafb",
@@ -234,29 +239,31 @@ useEffect(() => {
   };
 }, []);
 
+// 🔥 reusable function
+const fetchEvents = async () => {
+  try {
+    const res = await fetch(`${API_URL}/api/events`, {
+      headers: {
+        ...(import.meta.env.VITE_API_KEY && {
+          "x-api-key": import.meta.env.VITE_API_KEY,
+        }),
+      },
+    });
+
+    const json = await res.json();
+
+    setEvents({
+      active: json.active || [],
+      archive: json.archive || []
+    });
+
+  } catch (err) {
+    console.error("❌ Events fetch failed", err);
+  }
+};
+
+// 🔥 run once on load
 useEffect(() => {
-  const fetchEvents = async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/events`, {
-        headers: {
-          ...(import.meta.env.VITE_API_KEY && {
-            "x-api-key": import.meta.env.VITE_API_KEY,
-          }),
-        },
-      });
-
-      const json = await res.json();
-
-      setEvents({
-        active: json.active || [],
-        archive: json.archive || []
-      });
-
-    } catch (err) {
-      console.error("❌ Events fetch failed", err);
-    }
-  };
-
   fetchEvents();
 }, []);
 
@@ -280,22 +287,36 @@ useEffect(() => {
 };
 
 const handleAdd = () => {
-  if (!form.symbol || !form.quantity || !form.avgPrice) {
-    alert("Symbol, Quantity and Avg Price are required");
+  const rawSymbol = form.symbol?.trim();
+
+  if (!rawSymbol) {
+    alert("Enter a valid symbol");
     return;
   }
 
-  const symbol = normalizeSymbol(form.symbol);
+  const symbol = normalizeSymbol(rawSymbol);
   const qty = Number(form.quantity);
   const avg = Number(form.avgPrice);
 
+  if (!qty || qty <= 0) {
+    alert("Quantity must be greater than 0");
+    return;
+  }
+
+  if (!avg || avg <= 0) {
+    alert("Avg price must be greater than 0");
+    return;
+  }
+
   setData(prev => {
     const existing = prev.find(
-  d => normalizeSymbol(d.symbol) === normalizeSymbol(symbol)
-);
+      d => normalizeSymbol(d.symbol) === symbol
+    );
+
+    let updated;
 
     if (!existing) {
-      return [
+      updated = [
         ...prev,
         {
           symbol,
@@ -304,26 +325,31 @@ const handleAdd = () => {
           sector: form.sector || "-"
         }
       ];
+    } else {
+      const totalQty = existing.quantity + qty;
+
+      const totalInvestment =
+        existing.quantity * existing.avgPrice +
+        qty * avg;
+
+      const newAvg = totalInvestment / totalQty;
+
+      updated = prev.map(d =>
+        normalizeSymbol(d.symbol) === symbol
+          ? {
+              ...d,
+              quantity: totalQty,
+              avgPrice: Number(newAvg.toFixed(2))
+            }
+          : d
+      );
     }
 
-    // merge logic
-    const totalQty = existing.quantity + qty;
+    // ✅ SAVE HERE (correct place)
+    saveLocalPortfolio(updated);
+    refreshProfiles();
 
-    const totalInvestment =
-      existing.quantity * existing.avgPrice +
-      qty * avg;
-
-    const newAvg = totalInvestment / totalQty;
-
-    return prev.map(d =>
-      normalizeSymbol(d.symbol) === symbol
-        ? {
-            ...d,
-            quantity: totalQty,
-            avgPrice: Number(newAvg.toFixed(2))
-          }
-        : d
-    );
+    return updated;
   });
 
   setForm({
@@ -670,12 +696,6 @@ useEffect(() => {
   localStorage.setItem("darkMode", dark);
 }, [dark]);
 
-useEffect(() => {
-  const p = getActiveProfile();
-  setProfile(p);
-  setData(loadLocalPortfolio());
-}, []);
-
   const totalValue = cleanData.reduce(
   (s, d) => s + (Number(d?.currentValue) || 0),
   0
@@ -931,7 +951,7 @@ useEffect(() => {
  );
 
   const prevPrices = new Map(
-  data.map((d) => [d.symbol, d.currentPrice || 0])
+  data.map((d) => [normalizeSymbol(d.symbol), d.currentPrice || 0])
 );
 
 const updated = data.map((item) => {
@@ -977,6 +997,8 @@ const updated = data.map((item) => {
 
     const nifty = await fetchNiftyChange();
     setNiftyPct(nifty);
+
+    await fetchEvents();
 
     alert("✅ Prices updated successfully");
 
@@ -2979,43 +3001,55 @@ refreshProfiles();
       )}
     </div>
 
-    {/* 🔹 QUANTITY */}
-    <input
-      placeholder="Quantity"
-      value={form.quantity}
-      onChange={(e) =>
-        setForm({ ...form, quantity: e.target.value })
-      }
-      style={{
-        flex: 1,
-        padding: "8px 10px",
-        borderRadius: 8,
-        border: `1px solid ${theme.border}`,
-        background: theme.card,
-        color: theme.text,
-        fontSize: 13,
-        minWidth: 0
-      }}
-    />
+  {/* 🔹 QUANTITY */}
+<input
+  type="number"
+  placeholder="Quantity"
+  value={form.quantity}
+  onChange={(e) => {
+    const val = e.target.value;
 
-    {/* 🔹 AVG PRICE */}
-    <input
-      placeholder="Avg Price"
-      value={form.avgPrice}
-      onChange={(e) =>
-        setForm({ ...form, avgPrice: e.target.value })
-      }
-      style={{
-        flex: 1,
-        padding: "8px 10px",
-        borderRadius: 8,
-        border: `1px solid ${theme.border}`,
-        background: theme.card,
-        color: theme.text,
-        fontSize: 13,
-        minWidth: 0
-      }}
-    />
+    // ✅ allow only whole numbers (no alphabets, no decimals)
+    if (/^\d*$/.test(val)) {
+      setForm({ ...form, quantity: val });
+    }
+  }}
+  style={{
+    flex: 1,
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: `1px solid ${theme.border}`,
+    background: theme.card,
+    color: theme.text,
+    fontSize: 13,
+    minWidth: 0
+  }}
+/>
+
+{/* 🔹 AVG PRICE */}
+<input
+  type="number"
+  placeholder="Avg Price"
+  value={form.avgPrice}
+  onChange={(e) => {
+    const val = e.target.value;
+
+    // ✅ allow decimal numbers only
+    if (/^\d*\.?\d*$/.test(val)) {
+      setForm({ ...form, avgPrice: val });
+    }
+  }}
+  style={{
+    flex: 1,
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: `1px solid ${theme.border}`,
+    background: theme.card,
+    color: theme.text,
+    fontSize: 13,
+    minWidth: 0
+  }}
+/>
 
     {/* 🔹 SECTOR */}
     <input

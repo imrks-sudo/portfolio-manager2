@@ -432,7 +432,7 @@ const parsed = data.map((item) => {
 // 🔥 STEP 2: keep only meaningful
 const meaningful = parsed.filter((e) => e.type !== "OTHER");
 
-// 🔥 STEP 3: better dedup (symbol + type + date)
+// 🔥 STEP 3: deduplicate (symbol + type + date)
 const map = new Map();
 
 meaningful.forEach((e) => {
@@ -442,32 +442,59 @@ meaningful.forEach((e) => {
 
 const unique = Array.from(map.values());
 
-// 🔥 STEP 4: classify into buckets
+// 🔥 STEP 4: merge with previous events (prevents flicker)
+const existingMap = new Map();
+
+[...(EVENTS.active || []), ...(EVENTS.archive || [])].forEach((e) => {
+  const key = `${e.symbol}_${e.type}_${e.date}`;
+  existingMap.set(key, e);
+});
+
+// add new events
+unique.forEach((e) => {
+  const key = `${e.symbol}_${e.type}_${e.date}`;
+  existingMap.set(key, e);
+});
+
+const merged = Array.from(existingMap.values());
+
+// 🔥 STEP 5: classify with better lifecycle
 const active = [];
 const archive = [];
 
-unique.forEach((e) => {
+// normalize today (remove time)
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+merged.forEach((e) => {
   if (!e.date) return;
 
-  const diff =
-    (now - new Date(e.date)) / (1000 * 60 * 60 * 24);
+  const eventDate = new Date(e.date);
+  eventDate.setHours(0, 0, 0, 0);
 
-  if (diff >= 0 && diff <= 7) {
+  const diff =
+    (eventDate - today) / (1000 * 60 * 60 * 24);
+
+  // 🟢 UPCOMING + TODAY + RECENT (keep visible)
+  if (diff >= -3 && diff <= 7) {
     active.push(e);
-  } else if (diff > 7 && diff <= 30) {
+  }
+
+  // 🟡 OLDER EVENTS (move to archive)
+  else if (diff < -3 && diff >= -30) {
     archive.push(e);
   }
 });
 
-// 🔥 STEP 5: store
+// 🔥 STEP 6: store (limit size)
 EVENTS = {
   active: active.slice(0, 20),
   archive: archive.slice(0, 50),
 };
 
-    console.log(
-      `✅ Events updated: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
-    );
+console.log(
+  `✅ Events updated: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
+);
   } catch (err) {
     console.error("❌ Events fetch failed:", err.message);
   }
@@ -483,12 +510,23 @@ cron.schedule("0 18 * * *", fetchCorporateActions);
 fetchCorporateActions();
 fetchAMFI();
 
-app.get("/api/events", (req, res) => {
-  res.json({
-    success: true,
-    active: EVENTS.active || [],
-    archive: EVENTS.archive || [],
-  });
+let lastFetchTime = 0;
+
+app.get("/api/events", async (req, res) => {
+  try {
+    if (Date.now() - lastFetchTime > 6 * 60 * 60 * 1000) {
+      await fetchCorporateActions();
+      lastFetchTime = Date.now();
+    }
+
+    res.json({
+      success: true,
+      active: EVENTS.active || [],
+      archive: EVENTS.archive || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch events" });
+  }
 });
 
 app.post("/api/validate-upload", async (req, res) => {
