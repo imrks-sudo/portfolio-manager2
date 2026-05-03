@@ -53,8 +53,6 @@ const fetchAMFI = async () => {
 
 const app = express();
 app.set("trust proxy", 1); // if behind a proxy (e.g. Vercel)
-const cors = require("cors");
-const rateLimit = require("express-rate-limit");
 
 // 🔐 Allowed origins (PRODUCTION + DEV)
 const allowed = [
