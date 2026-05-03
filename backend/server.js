@@ -1,6 +1,8 @@
 const PORT = process.env.PORT || 5000;
 const API_KEY = process.env.API_KEY;
-
+const fs = require("fs");
+const path = require("path");
+const CACHE_FILE = path.join(__dirname, "mf-cache.json");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -43,7 +45,10 @@ const fetchAMFI = async () => {
       }
     });
 
-    MF_LIST = list;
+  MF_LIST = list;
+
+// 💾 Save to file
+fs.writeFileSync(CACHE_FILE, JSON.stringify(list, null, 2));
 
     console.log(`✅ AMFI loaded: ${MF_LIST.length}`);
   } catch (err) {
@@ -126,6 +131,11 @@ const normalizeMF = (str) =>
 
 // 🔍 SIMPLE MATCH
 const matchMF = (input) => {
+  if (!MF_LIST.length) {
+    console.error("❌ MF_LIST empty (cache + fetch failed)");
+    return { type: "invalid" };
+  }
+
   const norm = normalizeMF(input);
 
   const matches = MF_LIST.filter((mf) =>
@@ -521,6 +531,20 @@ cron.schedule("0 18 * * *", fetchCorporateActions);
 
 // 🚀 Run once on server start
 fetchCorporateActions();
+
+// 🔥 LOAD FROM CACHE FIRST
+try {
+  if (fs.existsSync(CACHE_FILE)) {
+    const data = fs.readFileSync(CACHE_FILE, "utf-8");
+    MF_LIST = JSON.parse(data);
+    console.log(`⚡ Loaded MF cache: ${MF_LIST.length}`);
+  } else {
+    console.log("⚠️ No MF cache found");
+  }
+} catch (err) {
+  console.error("❌ Failed to load MF cache", err.message);
+}
+
 fetchAMFI();
 
 let lastFetchTime = 0;
@@ -559,6 +583,26 @@ app.post("/api/validate-upload", async (req, res) => {
       },
       timeout: 5000,
     });
+
+  if (!MF_LIST.length) {
+  console.log("⏳ Waiting for MF cache...");
+
+  let retries = 0;
+
+  while (MF_LIST.length === 0 && retries < 10) {
+    await new Promise((r) => setTimeout(r, 300));
+    retries++;
+  }
+
+  // 🚨 FINAL SAFETY
+  if (!MF_LIST.length) {
+    console.error("❌ MF cache still empty after wait");
+
+    return res.status(503).json({
+      error: "MF data not ready. Please retry in a few seconds.",
+    });
+  }
+}
 
     // ✅ Init cookies
     try {
@@ -675,6 +719,7 @@ app.post("/api/validate-upload", async (req, res) => {
  * 🚀 START SERVER
  */
 
+cron.schedule("0 6 * * *", fetchAMFI); // 6 AM daily
 
 app.listen(PORT, () => {
   console.log("Server running on", PORT);
