@@ -122,24 +122,23 @@ const tough = require("tough-cookie");
 const jar = new tough.CookieJar();
 
 // 🔧 NORMALIZE
-const normalizeMF = (str) =>
-  (str || "")
-    .toLowerCase()
-    .replace(/fund|plan|growth|direct|regular/g, "")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
-
-// 🔍 SIMPLE MATCH
 const matchMF = (input) => {
   if (!MF_LIST.length) {
-    console.error("❌ MF_LIST empty (cache + fetch failed)");
+    console.error("❌ MF_LIST empty");
     return { type: "invalid" };
   }
 
-  const norm = normalizeMF(input);
+  const normalize = (s) =>
+    (s || "")
+      .toLowerCase()
+      .replace(/fund|plan|growth|direct|regular/g, "")
+      .replace(/[^a-z0-9]/g, "")   // 🔥 key fix
+      .trim();
+
+  const cleanInput = normalize(input);
 
   const matches = MF_LIST.filter((mf) =>
-    normalizeMF(mf.name).includes(norm)
+    normalize(mf.name).includes(cleanInput)
   );
 
   if (matches.length === 1) {
