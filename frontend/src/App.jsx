@@ -28,6 +28,33 @@ if (import.meta.env.DEV) {
   console.log("API URL:", import.meta.env.VITE_API_URL);
 }
 
+const safeJson = async (res) => {
+  try {
+    const json = await res.json();
+
+    return {
+      valid: json.valid || [],
+      suggestions: json.suggestions || [],
+      invalid: json.invalid || [],
+      data: json.data || [],
+      active: json.active || [],
+      archive: json.archive || [],
+      success: json.success === true
+    };
+  } catch (err) {
+    console.error("❌ JSON parse failed", err);
+    return {
+      valid: [],
+      suggestions: [],
+      invalid: [],
+      data: [],
+      active: [],
+      archive: [],
+      success: false
+    };
+  }
+};
+
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -250,7 +277,7 @@ const fetchEvents = async () => {
       },
     });
 
-    const json = await res.json();
+    const json = await safeJson(res);
 
     setEvents({
       active: json.active || [],
@@ -302,9 +329,9 @@ const validateSymbol = async (symbol) => {
       }),
     });
 
-    const json = await res.json();
+    const json = await safeJson(res);
 
-    return json.valid?.length > 0;
+    return (json.valid || []).length > 0;
   } catch (err) {
     console.error("Validation failed", err);
     return false;
@@ -464,7 +491,7 @@ const validateManualSymbol = (symbol) => {
         }),
       });
 
-      const json = await res.json();
+      const json = await safeJson(res);
 
       // 🛑 IGNORE OLD RESPONSES
       if (requestId !== requestIdRef.current) return;
@@ -982,7 +1009,7 @@ useEffect(() => {
       throw new Error("Failed to fetch prices");
     }
 
-  const json = await res.json();
+  const json = await safeJson(res);
   const backendData = json.data || [];
 
   const priceMap = new Map(
@@ -1208,7 +1235,7 @@ const res = await fetch(`${API_URL}/api/validate-upload`, {
   }),
 });
 
-const json = await res.json();
+const json = await safeJson(res);
 
 // 🔥 attach validation result to rows
 const enriched = cleaned.map((row) => {
@@ -1219,17 +1246,17 @@ const existing = cleanData.find(
  
 const inputSymbol = normalizeSymbol(row.symbol);
 
-const v = json.valid.find(
+const v = (json.valid || []).find(
   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+);
 
- const s = json.suggestions.find(
-   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+const s = (json.suggestions || []).find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
 
- const i = json.invalid.find(
-   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+const i = (json.invalid || []).find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
 
   return {
     ...row,
@@ -2254,18 +2281,20 @@ refreshProfiles();
                   }),
                 });
 
-                const json = await res.json();
+                const json = await safeJson(res);
                 const inputSymbol = normalizeSymbol(updated[i].symbol);
 
-                const v = json.valid.find(
-                  (x) => normalizeSymbol(x.input) === inputSymbol
-                );
-                const s = json.suggestions.find(
-                  (x) => normalizeSymbol(x.input) === inputSymbol
-                );
-                const inv = json.invalid.find(
-                  (x) => normalizeSymbol(x.input) === inputSymbol
-                );
+                const v = (json.valid || []).find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
+
+const s = (json.suggestions || []).find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
+
+const inv = (json.invalid || []).find(
+  (x) => normalizeSymbol(x.input) === inputSymbol
+);
 
                 if (v) {
                   const newSymbol = v.final;

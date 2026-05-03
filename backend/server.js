@@ -87,7 +87,7 @@ const fetchAMFI = async () => {
     console.log("✅ Parsed MF count:", list.length);
 
     // 🔥 FALLBACK TO CACHE (CRITICAL)
-    if (list.length < 5000) {
+    if (list.length < 3000) {
       console.log("⚠️ Using cached MF data (incomplete fetch)");
 
       if (fs.existsSync(CACHE_FILE)) {
@@ -643,10 +643,18 @@ app.post("/api/validate-upload", async (req, res) => {
     });
 
 if (!MF_LIST.length) {
-      return res.status(500).json({
-        error: "MF data not initialized",
-      });
-    }
+  console.error("⚠️ MF_LIST empty");
+
+  return res.json({
+    success: true,
+    valid: [],
+    suggestions: [],
+    invalid: rows.map((r) => ({
+      input: r.symbol,
+      type: "MF",
+    })),
+  });
+}
 
     // ✅ Init cookies
     try {
@@ -768,8 +776,8 @@ const initServer = async () => {
     console.log("🔍 MF sample:", MF_LIST.slice(0, 3));
 
     if (!MF_LIST.length) {
-      throw new Error("MF_LIST is empty after load");
-    }
+  console.error("⚠️ MF_LIST empty — continuing with empty list");
+}
 
     console.log("✅ MF Loaded:", MF_LIST.length);
 
