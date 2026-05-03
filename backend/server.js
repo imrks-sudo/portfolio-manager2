@@ -5,6 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const cron = require("node-cron");
+const rateLimit = require("express-rate-limit");
 
 // 🧠 In-memory events store
 let EVENTS = [];
@@ -52,32 +53,45 @@ const fetchAMFI = async () => {
 
 const app = express();
 app.set("trust proxy", 1); // if behind a proxy (e.g. Vercel)
+const cors = require("cors");
+const rateLimit = require("express-rate-limit");
+
+// 🔐 Allowed origins (PRODUCTION + DEV)
+const allowed = [
+  "https://watchmyfolio.com",
+  "https://www.watchmyfolio.com",
+  "http://localhost:5173"
+];
+
+// ✅ CORS CONFIG
 app.use(cors({
   origin: function (origin, callback) {
-    const allowed = [
-      "https://myportfoliomanager.vercel.app",
-      "http://localhost:5173"
-    ];
+    // allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
 
-    if (!origin || allowed.includes(origin)) {
+    if (allowed.includes(origin)) {
       callback(null, true);
     } else {
+      console.error("❌ CORS blocked:", origin);
       callback(new Error("Not allowed by CORS"));
     }
   },
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type", "x-api-key"],
+  credentials: false
 }));
 
-const rateLimit = require("express-rate-limit");
-
+// 🚦 RATE LIMITING
 const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 min
-  max: 20, // max 20 requests/min
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 app.use(limiter);
 
+// 📦 BODY PARSER
 app.use(express.json());
 
 // 🔐 API KEY PROTECTION
