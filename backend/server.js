@@ -25,34 +25,95 @@ const fetchAMFI = async () => {
   try {
     console.log("📡 Fetching AMFI data...");
 
-    const res = await axios.get(
-      "https://www.amfiindia.com/spages/NAVAll.txt"
-    );
+    const url = "https://www.amfiindia.com/spages/NAVAll.txt";
+
+    let res;
+
+    // 🔁 RETRY LOGIC (fixes partial download)
+    for (let i = 0; i < 3; i++) {
+      try {
+        res = await axios.get(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0",
+            Accept: "text/plain",
+            Referer: "https://www.amfiindia.com/",
+          },
+          timeout: 15000,
+        });
+
+        // 🔥 sanity check (full file is large)
+        if (res.data && res.data.length > 500000) {
+          break;
+        }
+
+        console.log("⚠️ Incomplete AMFI response, retrying...");
+      } catch (err) {
+        console.log("⚠️ AMFI fetch retry:", i + 1);
+      }
+    }
+
+    if (!res || !res.data) {
+      throw new Error("AMFI fetch failed");
+    }
 
     const lines = res.data.split("\n");
 
+    console.log("📊 AMFI lines:", lines.length);
+
     const list = [];
 
-    lines.forEach((line) => {
-      const parts = line.split(";");
+    const cleanLine = (line) => line.replace(/^\uFEFF/, "");
 
-      if (parts.length > 4 && parts[3] && !isNaN(parts[4])) {
+    lines.forEach((line) => {
+      const safeLine = cleanLine(line);
+
+      if (!safeLine || safeLine.includes("Scheme Code")) return;
+
+      const parts = safeLine.split(";");
+
+      const code = parts[0]?.trim();
+      const name = parts[3]?.trim();
+      const nav = parseFloat(parts[4]);
+
+      if (code && name && !isNaN(nav)) {
         list.push({
-          code: parts[0],
-          name: parts[3],
-          nav: parts[4],
+          code,
+          name,
+          nav,
         });
       }
     });
 
-  MF_LIST = list;
+    console.log("✅ Parsed MF count:", list.length);
 
-// 💾 Save to file
-fs.writeFileSync(CACHE_FILE, JSON.stringify(list, null, 2));
+    // 🔥 FALLBACK TO CACHE (CRITICAL)
+    if (list.length < 5000) {
+      console.log("⚠️ Using cached MF data (incomplete fetch)");
+
+      if (fs.existsSync(CACHE_FILE)) {
+        const data = fs.readFileSync(CACHE_FILE, "utf-8");
+        MF_LIST = JSON.parse(data);
+        return;
+      } else {
+        throw new Error("No cache available");
+      }
+    }
+
+    MF_LIST = list;
+
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(list, null, 2));
 
     console.log(`✅ AMFI loaded: ${MF_LIST.length}`);
   } catch (err) {
-    console.error("❌ AMFI fetch failed", err.message);
+    console.error("❌ AMFI fetch failed:", err.message);
+
+    // 🔥 FINAL FALLBACK
+    if (fs.existsSync(CACHE_FILE)) {
+      console.log("⚠️ Loading MF from cache");
+
+      const data = fs.readFileSync(CACHE_FILE, "utf-8");
+      MF_LIST = JSON.parse(data);
+    }
   }
 };
 
@@ -544,8 +605,6 @@ try {
   console.error("❌ Failed to load MF cache", err.message);
 }
 
-fetchAMFI();
-
 let lastFetchTime = 0;
 
 app.get("/api/events", async (req, res) => {
@@ -706,6 +765,7 @@ const initServer = async () => {
     console.log("⏳ Loading MF data...");
 
     await fetchAMFI(); // this should populate MF_LIST
+    console.log("🔍 MF sample:", MF_LIST.slice(0, 3));
 
     if (!MF_LIST.length) {
       throw new Error("MF_LIST is empty after load");
