@@ -584,25 +584,11 @@ app.post("/api/validate-upload", async (req, res) => {
       timeout: 5000,
     });
 
-  if (!MF_LIST.length) {
-  console.log("⏳ Waiting for MF cache...");
-
-  let retries = 0;
-
-  while (MF_LIST.length === 0 && retries < 10) {
-    await new Promise((r) => setTimeout(r, 300));
-    retries++;
-  }
-
-  // 🚨 FINAL SAFETY
-  if (!MF_LIST.length) {
-    console.error("❌ MF cache still empty after wait");
-
-    return res.status(503).json({
-      error: "MF data not ready. Please retry in a few seconds.",
-    });
-  }
-}
+if (!MF_LIST.length) {
+      return res.status(500).json({
+        error: "MF data not initialized",
+      });
+    }
 
     // ✅ Init cookies
     try {
@@ -715,12 +701,32 @@ app.post("/api/validate-upload", async (req, res) => {
   }
 });
 
-/**
- * 🚀 START SERVER
- */
+// 🔥 LOAD MF DATA BEFORE SERVER STARTS
+const initServer = async () => {
+  try {
+    console.log("⏳ Loading MF data...");
 
-cron.schedule("0 6 * * *", fetchAMFI); // 6 AM daily
+    await fetchAMFI(); // this should populate MF_LIST
 
-app.listen(PORT, () => {
-  console.log("Server running on", PORT);
-});
+    if (!MF_LIST.length) {
+      throw new Error("MF_LIST is empty after load");
+    }
+
+    console.log("✅ MF Loaded:", MF_LIST.length);
+
+    // 🚀 Start server ONLY after MF is ready
+    app.listen(PORT, () => {
+      console.log("Server running on", PORT);
+    });
+
+  } catch (err) {
+    console.error("❌ Failed to initialize server:", err.message);
+    process.exit(1); // crash fast (important for prod)
+  }
+};
+
+// 🔥 START INIT
+initServer();
+
+// ⏰ keep cron (after init)
+cron.schedule("0 6 * * *", fetchAMFI);
