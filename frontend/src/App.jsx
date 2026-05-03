@@ -28,6 +28,11 @@ if (import.meta.env.DEV) {
   console.log("API URL:", import.meta.env.VITE_API_URL);
 }
 
+const normalizeMF = (str) =>
+  (str || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
 const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -1209,6 +1214,7 @@ const res = await fetch(`${API_URL}/api/validate-upload`, {
 });
 
 const json = await res.json();
+console.log("Validation response:", json);
 
 // 🔥 attach validation result to rows
 const enriched = cleaned.map((row) => {
@@ -1220,26 +1226,29 @@ const existing = cleanData.find(
 const inputSymbol = normalizeSymbol(row.symbol);
 
 const v = json.valid.find(
-  (x) => normalizeSymbol(x.input) === inputSymbol
- );
+  (x) =>
+    normalizeMF(x.input) === normalizeMF(row.symbol)
+);
 
- const s = json.suggestions.find(
-   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+const s = json.suggestions.find(
+  (x) =>
+    normalizeMF(x.input) === normalizeMF(row.symbol)
+);
 
- const i = json.invalid.find(
-   (x) => normalizeSymbol(x.input) === inputSymbol
- );
+const i = json.invalid.find(
+  (x) =>
+    normalizeMF(x.input) === normalizeMF(row.symbol)
+);
 
   return {
     ...row,
     status: v
       ? "valid"
-      : s
+      : s?.suggested?.length
       ? "suggest"
       : "invalid",
     suggestions: s?.suggested || [],
-    finalSymbol: v?.final || row.symbol,
+    finalSymbol: v?.final || row.symbol.trim(),
 
     isDuplicate: !!existing,
     action: existing ? null : "new"
@@ -2337,7 +2346,7 @@ refreshProfiles();
                   return;
                 }
 
-                const newSymbol = row.selectedSuggestion.toUpperCase();
+                const newSymbol = row.selectedSuggestion;
 
                 setPreviewData(prev => {
                   const updated = [...prev];
