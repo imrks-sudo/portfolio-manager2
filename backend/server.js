@@ -92,6 +92,7 @@ app.use(limiter);
 // 📦 BODY PARSER
 app.use(express.json());
 
+/*
 // 🔐 API KEY PROTECTION
 app.use((req, res, next) => {
   const key = req.headers["x-api-key"];
@@ -107,7 +108,7 @@ app.use((req, res, next) => {
 
   next();
 });
-
+*/
 
 const { wrapper } = require("axios-cookiejar-support");
 const tough = require("tough-cookie");
