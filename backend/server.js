@@ -353,6 +353,8 @@ app.post("/update-prices", async (req, res) => {
         let pChange = 0;
         let high52 = 0;
         let low52 = 0;
+        let pe = 0;           
+        let marketCap = 0;
         if (s.includes("fund") || s.includes("plan")) {
 
           const search = await axios.get(
@@ -453,12 +455,12 @@ pChange =
   Number(response.data?.priceInfo?.pChange) || 0;
 
 // 🔥 ADD THIS
-const pe = Number(response.data?.metadata?.pe) || 0;
+pe = Number(response.data?.metadata?.pe) || 0;
 
-const shares =
+shares =
   Number(response.data?.securityInfo?.issuedCap) || 0;
 
-const marketCap = shares * price;
+marketCap = shares * price;
 
           console.log(
   `%c${symbol} → ₹${price}`,
@@ -475,7 +477,8 @@ const marketCap = shares * price;
         }
 
         // ✅ PUSH RESULT (instead of DB update)
-        results.push({
+        try {
+          results.push({
   symbol: symbolRaw,
   currentPrice: price,
   change: change || 0,
@@ -485,6 +488,10 @@ const marketCap = shares * price;
   pe,
   marketCap
 });
+successCount++;
+} catch (err) {
+  console.log("Push failed:", err.message);
+}
 
         successCount++;
 
