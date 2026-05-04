@@ -24,8 +24,19 @@ import {
   Tooltip,
 } from "recharts";
 
+
+const API_URL = import.meta.env.DEV
+  ? "http://localhost:5000"
+  : import.meta.env.VITE_API_URL;
+
+// 🔍 Optional debug (only in dev)
 if (import.meta.env.DEV) {
-  console.log("API URL:", import.meta.env.VITE_API_URL);
+  console.log("API URL:", API_URL);
+}
+
+// 🚨 Safety check (only in prod)
+if (!import.meta.env.DEV && !API_URL) {
+  throw new Error("❌ VITE_API_URL not set in production");
 }
 
 const safeJson = async (res) => {
@@ -54,13 +65,6 @@ const safeJson = async (res) => {
     };
   }
 };
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-if (!import.meta.env.VITE_API_URL) {
-  console.warn("⚠️ VITE_API_URL not set. Using localhost fallback.");
-}
 
 import Papa from "papaparse";
 
