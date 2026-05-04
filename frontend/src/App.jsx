@@ -150,6 +150,7 @@ const formatPercent = (value, total) =>
 
 function App() {
   const [profile, setProfile] = useState(() => getActiveProfile());
+  const [profileInput, setProfileInput] = useState("");
   const [data, setData] = useState([]);
   const cleanData = data.filter(Boolean);
   const hasData = cleanData.length > 0;
@@ -176,13 +177,25 @@ function App() {
   const inputRef = useRef(null);
   const [niftyPct, setNiftyPct] = useState(null);
 
-  useEffect(() => {
-  const loadNifty = async () => {
-    const val = await fetchNiftyChange();
-    setNiftyPct(val);
-  };
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get("ref");
 
-  loadNifty();
+  // ✅ store only once (prevents overwrite)
+  if (ref && !localStorage.getItem("referral")) {
+    const cleanRef = ref.trim();
+
+    if (cleanRef) {
+      localStorage.setItem("referral", cleanRef);
+
+      // ✅ track in analytics (only first time)
+      posthog.capture("referred_user", {
+        referrer: cleanRef,
+      });
+
+      console.log("🎯 Referred by:", cleanRef);
+    }
+  }
 }, []);
 
 useEffect(() => {
@@ -198,30 +211,59 @@ useEffect(() => {
   subText: dark ? "#9ca3af" : "#6b7280",
 };
 
+const handleProfileCreate = (name) => {
+  if (!name) return;
+
+  const trimmed = name.trim();
+
+  setActiveProfile(trimmed);
+  setProfile(trimmed);
+
+  // 🔥 ensure correct profile is used
+  useEffect(() => {
+  if (profile) {
+    fetchData();
+  }
+}, [profile]);
+
+  // 🔥 referral tracking
+  const ref = localStorage.getItem("referral");
+
+  if (ref) {
+    posthog.capture("referral_signup", {
+      referrer: ref,
+      new_user: trimmed,
+    });
+  }
+
+  // 🔥 UX improvement
+  setProfileInput("");
+};
+
 const fetchNiftyChange = async () => {
   try {
-    const res = await fetch(
-  "https://corsproxy.io/?https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=5d&interval=1d"
- );
+    const res = await fetch(`${API_URL}/api/nifty`);
 
-    const data = await res.json();
+    if (!res.ok) throw new Error("NIFTY fetch failed");
 
-    const result = data?.chart?.result?.[0];
-    if (!result) return null;
+    const json = await res.json();
 
-    const closes = result.indicators.quote[0].close.filter(Boolean);
+    const prices = (json.close || []).filter(
+      (p) => p !== null && p !== undefined
+    );
 
-    if (closes.length < 2) return null;
+    if (prices.length < 2) return 0;
 
-    const prev = closes[closes.length - 2];
-    const curr = closes[closes.length - 1];
+    const latest = prices[prices.length - 1];
+    const prev = prices[prices.length - 2];
 
-    const pct = ((curr - prev) / prev) * 100;
+    const changePct = ((latest - prev) / prev) * 100;
 
-    return Number(pct.toFixed(2));
+    return Number(changePct.toFixed(2));
+
   } catch (err) {
-    console.error("NIFTY fetch failed:", err);
-    return null;
+    console.error("❌ NIFTY fetch failed:", err);
+    return 0;
   }
 };
 
@@ -264,6 +306,10 @@ useEffect(() => {
   return () => {
     document.removeEventListener("mousedown", handleClickOutside);
   };
+}, []);
+
+useEffect(() => {
+  fetchNiftyChange().then(setNiftyPct);
 }, []);
 
 // 🔥 reusable function
@@ -1079,6 +1125,37 @@ const updated = data.map((item) => {
   }
 };
 
+const handleShare = async () => {
+  const profile = getActiveProfile() || "guest";
+
+  const shareUrl = `${window.location.origin}?ref=${encodeURIComponent(profile)}`;
+
+  const shareData = {
+    title: "WatchMyFolio",
+    text: "Track your portfolio like a pro 📊",
+    url: shareUrl,
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      openShareLinks(shareUrl);
+    }
+  } catch (err) {
+    console.error("Share failed:", err);
+  }
+};
+
+const openShareLinks = (url) => {
+  const text = encodeURIComponent("Track your portfolio like a pro 📊");
+  const encodedUrl = encodeURIComponent(url);
+
+  const whatsapp = `https://wa.me/?text=${text}%20${encodedUrl}`;
+
+  window.open(whatsapp, "_blank");
+};
+
   const normalize = (str) =>
   (str || "").toLowerCase().replace(/\s+/g, "").trim();
 
@@ -1454,53 +1531,47 @@ if (!profile) {
 
         {/* INPUT */}
         <input
-          placeholder="Enter your name"
-          autoFocus
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            borderRadius: 8,
-            border: `1px solid ${theme.border}`,
-            background: theme.card,
-color: theme.text,
-            marginBottom: 12
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && e.target.value.trim()) {
-              const name = e.target.value.trim();
-
-              setActiveProfile(name);
-              setProfile(name);
-              fetchData();
-            }
-          }}
-        />
+  placeholder="Enter your name"
+  autoFocus
+  value={profileInput}
+  onChange={(e) => setProfileInput(e.target.value)}
+  style={{
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 8,
+    border: `1px solid ${theme.border}`,
+    background: theme.card,
+    color: theme.text,
+    marginBottom: 12
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && profileInput.trim()) {
+      handleProfileCreate(profileInput.trim());
+    }
+  }}
+/>
 
         {/* BUTTON */}
-        <button
-          onClick={() => {
-            const input = document.querySelector("input");
-            if (!input.value.trim()) return;
+        {/* BUTTON */}
+<button
+  onClick={() => {
+    if (!profileInput.trim()) return;
 
-            const name = input.value.trim();
-
-            setActiveProfile(name);
-            setProfile(name);
-            fetchData();
-          }}
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: 8,
-            background: theme.card,
-            border: "none",
-            color: theme.text,
-            fontWeight: 500,
-            cursor: "pointer"
-          }}
-        >
-          Continue
-        </button>
+    handleProfileCreate(profileInput.trim());
+  }}
+  style={{
+    width: "100%",
+    padding: "10px",
+    borderRadius: 8,
+    background: theme.card,
+    border: "none",
+    color: theme.text,
+    fontWeight: 500,
+    cursor: "pointer"
+  }}
+>
+  Continue
+</button>
 
         {/* OPTIONAL FOOTNOTE */}
         <p style={{
@@ -1536,7 +1607,7 @@ color: theme.text,
     minWidth: 220
   }}
 >
-  <h2>Portfolio Management</h2>
+  <h2>watchmyfolio</h2>
 
   {/* DASHBOARD */}
   <div
@@ -1823,8 +1894,7 @@ if (profiles.includes(trimmed)) {
   return;
 }
 
-setActiveProfile(trimmed);
-setProfile(trimmed);
+handleProfileCreate(trimmed);
 saveLocalPortfolio([]);
 setData([]);
 refreshProfiles();
@@ -1857,6 +1927,26 @@ refreshProfiles();
 
   {/* RIGHT */}
   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+
+    <button
+  onClick={handleShare}
+  style={{
+    width: 34,
+    height: 34,
+    borderRadius: "50%",
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    fontSize: 16
+  }}
+  title="Share app"
+>
+  🔗
+</button>
 
     {/* 🔍 SEARCH */}
     <input

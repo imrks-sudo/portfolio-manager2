@@ -502,6 +502,61 @@ pChange =
   }
 });
 
+// =========================
+// 📊 NIFTY DATA (Yahoo)
+// =========================
+
+let cachedNifty = null;
+let lastFetch = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+app.get("/api/nifty", async (req, res) => {
+  try {
+    // 🔥 Serve from cache
+    if (cachedNifty && Date.now() - lastFetch < CACHE_DURATION) {
+      return res.json(cachedNifty);
+    }
+
+    const response = await axios.get(
+      "https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?range=5d&interval=1d",
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Accept: "application/json",
+        },
+        timeout: 5000,
+      }
+    );
+
+    const data = response.data;
+
+    // 🔥 Optional: minimal clean response (faster FE)
+    const result =
+      data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+
+    const niftyData = {
+      raw: data,        // full data if needed
+      close: result,    // simplified
+    };
+
+    // 🔥 cache
+    cachedNifty = niftyData;
+    lastFetch = Date.now();
+
+    res.json(niftyData);
+
+  } catch (err) {
+    console.error("❌ NIFTY fetch failed:", err.message);
+
+    // 🔥 fallback to stale cache (important UX)
+    if (cachedNifty) {
+      return res.json(cachedNifty);
+    }
+
+    res.status(500).json({ error: "Failed to fetch NIFTY" });
+  }
+});
+
 // 🔔 FETCH CORPORATE EVENTS FROM NSE
 const fetchCorporateActions = async () => {
   try {
