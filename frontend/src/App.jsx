@@ -148,6 +148,179 @@ const format2 = (v) =>
 const formatPercent = (value, total) =>
   total ? ((value / total) * 100).toFixed(2) : "0.00";
 
+// ==============================
+// 🧠 RISK ENGINE
+// ==============================
+
+const isStock = (symbol) => {
+  const s = (symbol || "").toLowerCase();
+
+  return !(
+    s.includes("fund") ||
+    s.includes("plan") ||
+    s.includes("etf") ||
+    s.includes("sgb") ||
+    s.endsWith("-e") ||
+    s.endsWith("-gb")
+  );
+};
+
+const getRiskScore = (d) => {
+  if (!isStock(d.symbol)) return 0; // ❌ exclude MF/ETF/SGB
+
+  let score = 0;
+
+  const price = Number(d.currentPrice) || 0;
+  const high52 = Number(d.high52) || 0;
+  const low52 = Number(d.low52) || 0;
+  const pe = Number(d.pe) || 0;
+  const marketCap = Number(d.marketCap) || 0;
+  const dailyPct = Number(d.dailyPct) || 0;
+
+  // 🧠 Volatility
+  let range = 0;
+
+  if (price > 0 && high52 > 0 && low52 > 0 && high52 > low52) {
+    range = (high52 - low52) / price;
+    range = Math.min(range, 2);
+  }
+
+  if (range > 1) score += 3;
+  else if (range > 0.5) score += 2;
+
+  // 📍 Position
+  if (high52 > low52 && price > 0) {
+    const position = (price - low52) / (high52 - low52);
+
+    if (position > 0.9) score += 1;
+    else if (position < 0.1) score += 1;
+  }
+
+  // ⚡ Daily move
+  if (Math.abs(dailyPct) > 5) score += 1;
+
+  // 📊 PE
+  if (pe > 50) score += 2;
+  else if (pe > 30) score += 1;
+
+  // 🏢 Market cap
+  if (marketCap > 0) {
+    if (marketCap < 5000e7) score += 2;
+    else if (marketCap < 20000e7) score += 1;
+  }
+
+  return score;
+};
+
+const RiskBadge = ({ d }) => {
+  const badge = getRiskBadge(d);
+  const [show, setShow] = React.useState(false);
+
+  if (!badge) return null;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center"
+      }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {/* BADGE */}
+      <span
+        style={{
+          fontSize: 10,
+          padding: "2px 6px",
+          borderRadius: 999,
+          background: badge.color,
+          color: "#fff",
+          fontWeight: 500,
+          cursor: "default"
+        }}
+      >
+        {badge.label}
+      </span>
+
+      {/* TOOLTIP */}
+      {show && badge.tooltip && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "130%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#111827",
+            color: "#fff",
+            padding: "6px 8px",
+            fontSize: 11,
+            borderRadius: 6,
+            whiteSpace: "nowrap",
+            zIndex: 9999
+          }}
+        >
+          {badge.tooltip}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const getRiskBadge = (d) => {
+  if (!isStock(d.symbol)) return null;
+
+  const score = getRiskScore(d);
+
+  const reasons = [];
+
+  // 🧠 Volatility
+  if (d.high52 && d.low52 && d.currentPrice) {
+    const range = (d.high52 - d.low52) / d.currentPrice;
+    if (range > 1) reasons.push("Highly volatile (wide 52W range)");
+    else if (range > 0.5) reasons.push("Moderate volatility");
+  }
+
+  // 📍 Position
+  if (d.high52 && d.low52 && d.currentPrice) {
+    const pos = (d.currentPrice - d.low52) / (d.high52 - d.low52);
+
+    if (pos > 0.9) reasons.push("Near 52W high");
+    if (pos < 0.1) reasons.push("Near 52W low");
+  }
+
+  // ⚡ Daily move
+  if (Math.abs(d.dailyPct) > 5) {
+    reasons.push("Sharp price movement today");
+  }
+
+  // 📊 PE
+  if (d.pe > 50) reasons.push("Overvalued (high PE)");
+  else if (d.pe > 30) reasons.push("Elevated valuation");
+
+  // 🏢 Market cap
+  if (d.marketCap < 5000e7) reasons.push("Small cap (higher risk)");
+  else if (d.marketCap < 20000e7) reasons.push("Mid cap");
+
+  let tooltip = reasons.slice(0, 2).join(" • ");
+
+if (!tooltip) {
+  if (score >= 6) tooltip = "High risk due to multiple factors";
+  else if (score >= 3) tooltip = "Moderate risk stock";
+  else tooltip = "Low risk • stable stock";
+}
+
+  if (score >= 6) {
+    return { label: "HIGH", color: "#ef4444", tooltip };
+  }
+
+  if (score >= 3) {
+    return { label: "MID", color: "#f59e0b", tooltip };
+  }
+
+  return { label: "LOW", color: "#22c55e", tooltip };
+};
+
 function App() {
   const [profile, setProfile] = useState(() => getActiveProfile());
   const [profileInput, setProfileInput] = useState("");
@@ -1101,7 +1274,9 @@ const updated = data.map((item) => {
     dailyChange,   // ✅ REQUIRED
     dailyPct,       // ✅ REQUIRED
     high52: match.high52,
-  low52: match.low52,
+    low52: match.low52,
+    pe: match.pe,
+    marketCap: match.marketCap,
   };
 });
 
@@ -3421,14 +3596,27 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     />
   ) : (
     <div
-      style={{
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      }}
-      title={d.symbol} // ✅ shows full name on hover
-    >
-      {d.symbol}
-    </div>
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    overflow: "visible"
+  }}
+>
+  {/* SYMBOL */}
+  <span
+    style={{
+      textOverflow: "ellipsis",
+      overflow: "hidden",
+      whiteSpace: "nowrap"
+    }}
+  >
+    {d.symbol}
+  </span>
+
+  {/* BADGE */}
+  <RiskBadge d={d} />
+</div>
   )}
 </td>
         <td style={{ width: 140 }}>

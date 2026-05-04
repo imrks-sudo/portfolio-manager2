@@ -377,3 +377,47 @@ input {
 .app.dark .suggestion-item:hover {
   background: #1e293b !important;
 }
+
+/* ================= TOOLTIP ================= */
+
+.tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tooltip-box {
+  position: absolute;
+  bottom: 130%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.15s ease;
+  z-index: 99999;
+}
+
+.tooltip-wrapper:hover .tooltip-box {
+  opacity: 1;
+}
+
+.app.dark .tooltip-box {
+  background: #020617;
+  border: 1px solid #1f2937;
+}
+
+.table tr {
+  overflow: visible !important;
+  position: relative;
+}
+
+.table td {
+  overflow: visible !important;
+  position: relative;
+}

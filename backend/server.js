@@ -452,6 +452,14 @@ change =
 pChange =
   Number(response.data?.priceInfo?.pChange) || 0;
 
+// 🔥 ADD THIS
+const pe = Number(response.data?.metadata?.pe) || 0;
+
+const shares =
+  Number(response.data?.securityInfo?.issuedCap) || 0;
+
+const marketCap = shares * price;
+
           console.log(
   `%c${symbol} → ₹${price}`,
   "color: #22c55e; font-weight: bold;"
@@ -474,6 +482,8 @@ pChange =
   pChange: pChange || 0,
   high52,
   low52,
+  pe,
+  marketCap
 });
 
         successCount++;
