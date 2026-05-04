@@ -87,17 +87,12 @@ const fetchAMFI = async () => {
     console.log("✅ Parsed MF count:", list.length);
 
     // 🔥 FALLBACK TO CACHE (CRITICAL)
-    if (list.length < 3000) {
-      console.log("⚠️ Using cached MF data (incomplete fetch)");
-
-      if (fs.existsSync(CACHE_FILE)) {
-        const data = fs.readFileSync(CACHE_FILE, "utf-8");
-        MF_LIST = JSON.parse(data);
-        return;
-      } else {
-        throw new Error("No cache available");
-      }
-    }
+    // 🔥 ONLY update if FULL dataset
+if (list.length > MF_LIST.length && list.length > 5000) {
+  console.log("✅ AMFI refreshed:", list.length);
+} else {
+  console.log("⚠️ Skipping update (partial data)");
+}
 
     MF_LIST = list;
 
@@ -189,28 +184,125 @@ const matchMF = (input) => {
     return { type: "invalid" };
   }
 
-  const normalize = (s) =>
-    (s || "")
-      .toLowerCase()
-      .replace(/fund|plan|growth|direct|regular/g, "")
-      .replace(/[^a-z0-9]/g, "")   // 🔥 key fix
-      .trim();
+const normalize = (str) =>
+  (str || "")
+    .toLowerCase()
+    .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 
-  const cleanInput = normalize(input);
+const cleanInput = normalize(input);
 
-  const matches = MF_LIST.filter((mf) =>
-    normalize(mf.name).includes(cleanInput)
-  );
+// 🔥 smarter matching (bi-directional + partial)
+const inputWords = cleanInput.split(" ").filter(w => w.length > 2);
 
-  if (matches.length === 1) {
-    return { type: "valid", match: matches[0] };
+const matches = MF_LIST
+  .filter((mf) => {
+    const normName = normalize(mf.name);
+
+    // 🔥 REQUIRE at least 2 meaningful word matches
+    const matchCount = inputWords.filter(w =>
+      normName.includes(w)
+    ).length;
+
+    return matchCount >= Math.min(2, inputWords.length);
+  })
+  .map((mf) => {
+    const normName = normalize(mf.name);
+    const nameLower = mf.name.toLowerCase();
+
+    let score = 0;
+
+    const matchCount = inputWords.filter(w =>
+      normName.includes(w)
+    ).length;
+
+    score += matchCount * 5;
+
+    if (normName.includes(cleanInput)) score += 10;
+    if (normName.startsWith(cleanInput)) score += 5;
+
+    if (nameLower.includes("direct")) score += 2;
+    if (nameLower.includes("growth")) score += 1;
+    if (nameLower.includes("regular")) score -= 1;
+
+    return { ...mf, score };
+  })
+  .sort((a, b) => b.score - a.score);
+
+  const finalMatches = matches.slice(0, 5);
+
+// 🔥 remove duplicates (same scheme family)
+const seen = new Set();
+const uniqueMatches = [];
+
+for (const m of matches) {
+  const key = normalize(m.name)
+    .replace(/direct|growth|regular|idcw/g, "");
+
+  if (!seen.has(key)) {
+    seen.add(key);
+    uniqueMatches.push(m);
   }
+}
 
-  if (matches.length > 1) {
-    return { type: "suggest", matches: matches.slice(0, 5) };
+// 🔥 FINAL DECISION
+
+if (uniqueMatches.length === 1) {
+  return { type: "valid", match: uniqueMatches[0] };
+}
+
+if (uniqueMatches.length > 1) {
+  return {
+    type: "suggest",
+    matches: uniqueMatches.slice(0, 5),
+  };
+}
+
+return { type: "invalid" };
+};
+
+const fetchMFAPI = async () => {
+  try {
+    console.log("📡 Fetching MF list from MFAPI...");
+
+    const res = await axios.get("https://api.mfapi.in/mf", {
+      timeout: 15000,
+    });
+
+    if (!Array.isArray(res.data) || res.data.length === 0) {
+      throw new Error("Invalid MFAPI response");
+    }
+
+      const list = res.data.map((mf) => ({
+      code: mf.schemeCode,
+      name: mf.schemeName,
+      nav: null,
+    }));
+
+    // 🚨 SAFETY CHECK (prevent bad overwrite)
+    if (list.length < 5000) {
+      console.log("⚠️ Skipping MFAPI update (too small dataset)");
+      return;
+    }
+
+    // 🔥 UPDATE ONLY IF BETTER THAN CURRENT
+    if (list.length > MF_LIST.length) {
+      MF_LIST = list;
+
+      fs.writeFileSync(
+        CACHE_FILE,
+        JSON.stringify(list, null, 2)
+      );
+
+      console.log("💾 MF cache updated from MFAPI");
+    } else {
+      console.log("⚠️ Skipping update (no improvement)");
+    }
+
+  } catch (err) {
+    console.error("❌ MFAPI fetch failed:", err.message);
   }
-
-  return { type: "invalid" };
 };
 
 app.post("/update-prices", async (req, res) => {
@@ -275,10 +367,10 @@ if (!search.data?.length) {
 
 // 🔥 NORMALIZE FUNCTION
 const normalize = (str) =>
-  str
+  (str || "")
     .toLowerCase()
-    .replace(/direct|growth|regular|plan|fund|-/g, "")
-    .replace(/\s+/g, "")
+    .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
+    .replace(/[^a-z0-9 ]/g, "") // 👈 KEEP SPACE
     .trim();
 
 // 🔥 FIND BEST MATCH
@@ -592,19 +684,6 @@ cron.schedule("0 18 * * *", fetchCorporateActions);
 // 🚀 Run once on server start
 fetchCorporateActions();
 
-// 🔥 LOAD FROM CACHE FIRST
-try {
-  if (fs.existsSync(CACHE_FILE)) {
-    const data = fs.readFileSync(CACHE_FILE, "utf-8");
-    MF_LIST = JSON.parse(data);
-    console.log(`⚡ Loaded MF cache: ${MF_LIST.length}`);
-  } else {
-    console.log("⚠️ No MF cache found");
-  }
-} catch (err) {
-  console.error("❌ Failed to load MF cache", err.message);
-}
-
 let lastFetchTime = 0;
 
 app.get("/api/events", async (req, res) => {
@@ -675,29 +754,52 @@ if (!MF_LIST.length) {
         // 🔵 MUTUAL FUND
         // =========================
         if (isMF) {
-          const result = matchMF(symbol);
+  let result = matchMF(symbol);
 
-          if (result.type === "valid") {
-            valid.push({
-              input: original, // ✅ keep user input
-              type: "MF",
-              final: result.match.name,
-              code: result.match.code,
-              nav: result.match.nav,
-            });
-          } else if (result.type === "suggest") {
-            suggestions.push({
-              input: original,
-              type: "MF",
-              suggested: result.matches.map((m) => m.name),
-            });
-          } else {
-            invalid.push({
-              input: original,
-              type: "MF",
-            });
-          }
-        }
+  // 🔥 STEP 1: MFAPI fallback if no match from cache
+  if (result.type === "invalid") {
+    try {
+      const search = await axios.get(
+        "https://api.mfapi.in/mf/search?q=" +
+          encodeURIComponent(symbol)
+      );
+
+      if (search.data?.length) {
+        result = {
+          type: "suggest",
+          matches: search.data.slice(0, 5).map((m) => ({
+            name: m.schemeName,
+            code: m.schemeCode,
+          })),
+        };
+      }
+    } catch (err) {
+      console.log("⚠️ MFAPI fallback failed:", err.message);
+    }
+  }
+
+  // 🔥 STEP 2: FINAL DECISION
+  if (result.type === "valid") {
+    valid.push({
+      input: original,
+      type: "MF",
+      final: result.match.name,
+      code: result.match.code,
+      nav: result.match.nav,
+    });
+  } else if (result.type === "suggest") {
+    suggestions.push({
+      input: original,
+      type: "MF",
+      suggested: result.matches.map((m) => m.name),
+    });
+  } else {
+    invalid.push({
+      input: original,
+      type: "MF",
+    });
+  }
+}
 
         // =========================
         // 🟢 STOCK / ETF / SGB
@@ -770,25 +872,31 @@ if (!MF_LIST.length) {
 // 🔥 LOAD MF DATA BEFORE SERVER STARTS
 const initServer = async () => {
   try {
-    console.log("⏳ Loading MF data...");
+    console.log("⏳ Starting server...");
 
-    await fetchAMFI(); // this should populate MF_LIST
-    console.log("🔍 MF sample:", MF_LIST.slice(0, 3));
+    // 🔥 Try loading cache
+    if (fs.existsSync(CACHE_FILE)) {
+      const data = fs.readFileSync(CACHE_FILE, "utf-8");
+      MF_LIST = JSON.parse(data);
+      console.log("⚡ Loaded MF cache:", MF_LIST.length);
+    }
 
-    if (!MF_LIST.length) {
-  console.error("⚠️ MF_LIST empty — continuing with empty list");
-}
+    // 🔥 If cache is too small → fetch BEFORE starting
+    if (!MF_LIST.length || MF_LIST.length < 10000) {
+      console.log("⏳ Cache too small, fetching MFAPI before start...");
+      await fetchMFAPI();
+    } else {
+      // otherwise refresh in background
+      fetchMFAPI();
+    }
 
-    console.log("✅ MF Loaded:", MF_LIST.length);
-
-    // 🚀 Start server ONLY after MF is ready
+    // 🚀 Start server
     app.listen(PORT, () => {
       console.log("Server running on", PORT);
     });
 
   } catch (err) {
-    console.error("❌ Failed to initialize server:", err.message);
-    process.exit(1); // crash fast (important for prod)
+    console.error("❌ Server init failed:", err.message);
   }
 };
 
@@ -796,4 +904,4 @@ const initServer = async () => {
 initServer();
 
 // ⏰ keep cron (after init)
-cron.schedule("0 6 * * *", fetchAMFI);
+cron.schedule("0 6 * * *", fetchMFAPI);
