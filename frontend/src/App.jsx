@@ -2240,7 +2240,8 @@ refreshProfiles();
         background: theme.card,
         color: theme.text,
         fontSize: 13,
-        width: 220
+        width: "100%",
+        maxWidth: 220
       }}
     />
 

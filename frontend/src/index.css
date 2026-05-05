@@ -75,6 +75,15 @@ body {
   background: var(--card-bg, #ffffff);
   border-radius: 12px;
   padding: 10px 12px;
+    /* 🔥 softer border instead of harsh */
+  border: 1px solid rgba(255, 255, 255, 0.06);
+
+  /* ❌ remove heavy default shadow */
+  box-shadow: none;
+
+  /* smooth interactions */
+  transition: all 0.2s ease;
+}
 
 .app {
   --card-bg: #ffffff;
@@ -84,15 +93,7 @@ body {
   --card-bg: #020617;
 }
 
-  /* 🔥 softer border instead of harsh */
-  border: 1px solid rgba(255, 255, 255, 0.06);
 
-  /* ❌ remove heavy default shadow */
-  box-shadow: none;
-
-  /* smooth interactions */
-  transition: all 0.2s ease;
-}
 
 /* 🔥 subtle hover (not always active) */
 .card:hover {
@@ -351,9 +352,8 @@ button:hover {
 
   .main {
     flex: 1;
-    padding: 16px 20px;
+    padding: 16px;
     min-width: 0;
-    overflow-x: hidden; /* 🔥 prevents layout shift */
   }
 }
 
@@ -451,4 +451,19 @@ button:hover {
   .close-btn {
     display: block !important;
   }
+}
+
+.flex > * {
+  min-width: 0;
+}
+
+.card,
+.fire-grid,
+.table {
+  min-width: 0;
+}
+
+.table {
+  display: block;
+  overflow-x: auto;
 }
