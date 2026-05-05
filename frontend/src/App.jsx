@@ -1784,8 +1784,7 @@ if (!profile) {
     color: theme.text,
     borderRight: `1px solid ${theme.border}`,
     width: 220,
-    minWidth: 220,
-    position: "relative"
+    minWidth: 220
   }}
 >
 
@@ -2008,7 +2007,7 @@ if (!profile) {
       width: "100%",
       height: "100%",
       background: "rgba(0,0,0,0.4)",
-      zIndex: 998
+      zIndex: 999
     }}
   />
 )}
@@ -2024,6 +2023,7 @@ if (!profile) {
 >
 
 <div
+  className="header-container"
   style={{
     display: "flex",
     justifyContent: "space-between",
@@ -2054,8 +2054,9 @@ if (!profile) {
 
   {/* LEFT */}
   <div>
-    <h2 style={{ marginBottom: 4 }}>
-  {getGreeting()}, {profile} 👋
+<h2 style={{ fontSize: 20, lineHeight: 1.3 }}>
+  {getGreeting()},<br />
+  {profile} 👋
 </h2>
 
 <p style={{ opacity: 0.7, fontSize: 13 }}>
@@ -2202,7 +2203,10 @@ refreshProfiles();
 )}
 
   {/* RIGHT */}
-  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+  <div
+  className="header-right"
+  style={{ display: "flex", alignItems: "center", gap: 10 }}
+>
 
     <button
   onClick={handleShare}
