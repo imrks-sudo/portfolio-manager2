@@ -2017,7 +2017,6 @@ if (!profile) {
   style={{
   flex: 1,                // ✅ take remaining space
   padding: 20,
-  overflowX: "hidden",    // prevents layout shift
   color: theme.text
 }}
 >
@@ -2027,9 +2026,10 @@ if (!profile) {
   style={{
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",   // 🔥 align top (fix spacing)
     marginBottom: 18,
-    gap: 12
+    gap: 12,
+    flexWrap: "wrap"            // 🔥 prevents breaking
   }}
 >
 
@@ -2054,12 +2054,12 @@ if (!profile) {
 
   {/* LEFT */}
   <div>
-<h2 style={{ fontSize: 20, lineHeight: 1.3 }}>
+<h2 style={{ fontSize: 20, lineHeight: 1.2, margin: 0 }}>
   {getGreeting()},<br />
   {profile} 👋
 </h2>
 
-<p style={{ opacity: 0.7, fontSize: 13 }}>
+<p style={{ opacity: 0.7, fontSize: 13, marginTop: 4 }}>
   {todayText}
 </p>
   </div>
@@ -2203,9 +2203,16 @@ refreshProfiles();
 )}
 
   {/* RIGHT */}
-  <div
+ <div
   className="header-right"
-  style={{ display: "flex", alignItems: "center", gap: 10 }}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",          // 🔥 prevents overlap
+    justifyContent: "flex-end",
+    minWidth: 0
+  }}
 >
 
     <button
@@ -2234,15 +2241,16 @@ refreshProfiles();
       onChange={(e) => setSearch(e.target.value)}
       placeholder="Search holdings..."
       style={{
-        padding: "8px 12px",
-        borderRadius: 8,
-        border: `1px solid ${theme.border}`,
-        background: theme.card,
-        color: theme.text,
-        fontSize: 13,
-        width: "100%",
-        maxWidth: 220
-      }}
+  padding: "8px 12px",
+  borderRadius: 8,
+  border: `1px solid ${theme.border}`,
+  background: theme.card,
+  color: theme.text,
+  fontSize: 13,
+  flex: "1 1 160px",   // 🔥 responsive width
+  minWidth: 140,
+  maxWidth: 220
+}}
     />
 
   {/* 🔔 ALERTS */}
@@ -2251,8 +2259,8 @@ refreshProfiles();
   <div
     onClick={() => setShowAlerts(prev => !prev)}
     style={{
-      width: 34,
-      height: 34,
+      width: 32,
+      height: 32,
       borderRadius: "50%",
       background: theme.card,
       border: `1px solid ${theme.border}`,
