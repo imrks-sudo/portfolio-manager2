@@ -339,21 +339,22 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
+  /* 🔥 IMPORTANT: DO NOT HIDE SIDEBAR */
   .sidebar {
-    display: none;
+    display: block; /* 👈 changed from 'none' */
   }
 
-/* Fix grid overflow issue */
-input {
-  min-width: 0;
-}
+  /* Fix grid overflow issue */
+  input {
+    min-width: 0;
+  }
 
   .main {
-  flex: 1;
-  padding: 16px 20px;
-  min-width: 0; 
-  overflow-x: hidden;  /* 🔥 prevents grid overflow */
-}
+    flex: 1;
+    padding: 16px 20px;
+    min-width: 0;
+    overflow-x: hidden; /* 🔥 prevents layout shift */
+  }
 }
 
 /* 🔥 FORCE LIGHT */
