@@ -1,3 +1,9 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 * {
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -69,6 +75,9 @@ body {
   flex: 1;
   padding: 16px;
   min-width: 0;
+  width: auto;          /* ✅ ADD THIS */
+  max-width: 100%;  
+  overflow-x: hidden;
 }
 
 /* ================= CARDS ================= */
@@ -149,8 +158,8 @@ body {
 }
 
 .flex > * {
-  flex: 1 1 320px;
-  min-width: 0;
+  flex: 1 1 0;      /* 🔥 allow shrinking */
+  min-width: 0;     /* 🔥 critical */
 }
 
 .section-title {
@@ -253,7 +262,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 /* ================= TABLE ================= */
 .table {
   width: 100%;
-  min-width: 800px; /* 👈 keeps horizontal scroll inside container */
+  min-width: 0; /* 👈 keeps horizontal scroll inside container */
   margin-top: 16px;
   border-collapse: collapse;
   border-spacing: 0 8px;
@@ -262,7 +271,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 .table th,
 .table td {
-  white-space: nowrap;   /* 🔥 prevents text wrapping */
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .table tr {
@@ -472,10 +484,14 @@ button:hover {
     width: 220px;
     z-index: 2000;
     transform: translateX(-100%);
+    min-width: 0;
+    flex: none;
+    pointer-events: none;   
   }
 
   .sidebar.open {
     transform: translateX(0);
+    pointer-events: auto;
   }
 
   .mobile-menu-btn {
@@ -557,7 +573,57 @@ html, body, #root {
 }
 
 @media (max-width: 768px) {
+  .app {
+    display: flex;         /* ✅ KEEP FLEX */
+  }
   .analytics-container {
     flex-direction: column !important;
   }
+}
+
+@media (max-width: 600px) {
+
+  /* TODAY + PORTFOLIO grids */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+}
+
+.app {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+@media (max-width: 768px) {
+  .main {
+    padding: 12px !important;   /* 🔥 reduce from 20 */
+  }
+}
+
+@media (max-width: 768px) {
+  .card {
+    padding: 10px 10px;   /* 🔥 reduce horizontal padding */
+  }
+}
+
+.card * {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 768px) {
+  .flex > * {
+    flex: 1 1 100%;
+  }
+}
+
+.sidebar {
+  flex-shrink: 0;
+}
+
+.main {
+  box-sizing: border-box;
 }

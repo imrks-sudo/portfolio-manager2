@@ -1771,7 +1771,6 @@ if (!profile) {
     <div
   className={dark ? "app dark" : "app"}
   style={{
-    display: "flex",   // ✅ IMPORTANT
     background: theme.bg,
     minHeight: "100vh",
     color: theme.text
@@ -2013,13 +2012,15 @@ if (!profile) {
   />
 )}
 
-      <main
+<main
   className="main"
   style={{
-  flex: 1,                // ✅ take remaining space
-  padding: 20,
-  color: theme.text
-}}
+    flex: 1,
+    padding: "16px",   // slightly reduced
+    width: "100%",
+    boxSizing: "border-box",  // 🔥 CRITICAL
+    color: theme.text
+  }}
 >
 
 <div
@@ -2568,14 +2569,21 @@ refreshProfiles();
         </div>
 
         {/* TABLE */}
-        <div style={{ maxHeight: 350, overflowY: "auto", overflowX: "auto" }}>
-        <table
-  className="table"
+  <div
   style={{
-    width: "100%",
-    tableLayout: "fixed"
+    maxHeight: 350,
+    overflowY: "auto",
+    overflowX: "auto",
+    width: "100%",       // ✅ CRITICAL
   }}
 >
+  <table
+    className="table"
+    style={{
+      width: "100%",
+      tableLayout: "auto"   // ✅ FIXED (was 'fixed')
+    }}
+  >
             <thead>
   <tr>
     <th style={{ fontWeight: 500, color: theme.subText }}>Status</th>
@@ -3108,12 +3116,13 @@ const inv = (json.invalid || []).find(
   </div>
 
   <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-      gap: 12,
-    }}
-  >
+  className="dashboard-grid"
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 12,
+  }}
+>
     {/* TODAY */}
     <div
       className="card"
@@ -3236,12 +3245,13 @@ const inv = (json.invalid || []).find(
   </div>
 
   <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-      gap: 12,
-    }}
-  >
+  className="dashboard-grid"
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+    gap: 12,
+  }}
+>
     {/* Investment */}
     <div
       className="card"
@@ -3366,10 +3376,11 @@ const inv = (json.invalid || []).find(
     {/* 🔹 SYMBOL INPUT */}
     <div
       style={{
-        flex: 2,
+        flex: "2 1 200px", 
         position: "relative",
         minWidth: 0,
-        display: "flex"  
+        display: "flex",
+        flexWrap: "wrap" 
       }}
     >
       <input
@@ -3466,7 +3477,7 @@ const inv = (json.invalid || []).find(
     }
   }}
   style={{
-    flex: 1,
+    flex: "1 1 120px",
     padding: "8px 10px",
     borderRadius: 8,
     border: `1px solid ${theme.border}`,
@@ -3491,7 +3502,7 @@ const inv = (json.invalid || []).find(
     }
   }}
   style={{
-    flex: 1,
+    flex: "1 1 120px",
     padding: "8px 10px",
     borderRadius: 8,
     border: `1px solid ${theme.border}`,
@@ -3510,7 +3521,7 @@ const inv = (json.invalid || []).find(
         setForm({ ...form, sector: e.target.value })
       }
       style={{
-        flex: 1,
+        flex: "1 1 120px",
         padding: "8px 10px",
         borderRadius: 8,
         border: `1px solid ${theme.border}`,
@@ -3526,6 +3537,7 @@ const inv = (json.invalid || []).find(
       onClick={handleAdd}
       style={{
         flexShrink: 0,
+        flexBasis: "100px",  
         padding: "8px 14px",
         borderRadius: 8,
         background: "#2563eb",
