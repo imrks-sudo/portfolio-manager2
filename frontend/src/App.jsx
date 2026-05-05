@@ -4050,7 +4050,6 @@ const clampedPosition = Math.max(0, Math.min(100, position));
         )}
 
         {/* ANALYTICS */}
-
 {view === "analytics" && (
   <div
     style={{
@@ -4060,165 +4059,187 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     }}
   >
 
-    {/* Sector */}
-    <div className="card" style={{
-  flex: 1,
-  minWidth: 0,        // 🔥 critical
-  width: "100%"
-}}>
-      <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <PieChartIcon size={18} strokeWidth={1.5} />
-  Asset Allocation
-</h3>
-
-{/* ✅ Responsive wrapper */}
-<div
-  style={{
-    width: "100%",
-    display: "flex",
-    justifyContent: "center"
-  }}
->
-  <PieChart width={280} height={260}>
-
-    <Pie
-      data={assetData}
-      dataKey="value"
-      innerRadius={70}   // 🔥 slightly reduced for smaller screens
-      outerRadius={110}
+    {/* ================= SECTOR ================= */}
+    <div
+      className="card"
+      style={{
+        flex: 1,
+        minWidth: 0,
+        width: "100%"
+      }}
     >
-      {assetData.map((_, i) => (
-        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-      ))}
-    </Pie>
+      <h3
+        style={{
+          color: theme.text,
+          display: "flex",
+          alignItems: "center",
+          gap: 8
+        }}
+      >
+        <PieChartIcon size={18} strokeWidth={1.5} />
+        Sector
+      </h3>
 
-        {/* ✅ CENTER TEXT (CORRECT PLACE) */}
-        <text
-          x="50%"
-          y="45%"
-          textAnchor="middle"
-          style={{ fill: dark ? "#9ca3af" : "#6b7280", fontSize: 11 }}
-        >
-          Total
-        </text>
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12
+        }}
+      >
+        <div style={{ width: "100%", height: 260 }}>
+          <PieChart width="100%" height={260}>
+            <Pie
+              data={sectorData}
+              dataKey="value"
+              innerRadius={60}
+              outerRadius={90}
+            >
+              {sectorData.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
 
-        <text
-          x="50%"
-          y="55%"
-          textAnchor="middle"
-          style={{ fill: dark ? "#fff" : "#111827", fontSize: 16, fontWeight: 600 }}
-        >
-          ₹{format2(totalValue)}
-        </text>
+            <text
+              x="50%"
+              y="45%"
+              textAnchor="middle"
+              style={{
+                fill: dark ? "#9ca3af" : "#6b7280",
+                fontSize: 11
+              }}
+            >
+              Total
+            </text>
 
-        {/* Tooltip */}
-        <Tooltip
-  contentStyle={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`,
-    color: theme.text
-  }}
-  formatter={(value, name, props) => [
-    `₹${format2(value)}`,
-    props.payload.name
-  ]}
-/>
-      </PieChart>
+            <text
+              x="50%"
+              y="55%"
+              textAnchor="middle"
+              style={{
+                fill: dark ? "#fff" : "#111827",
+                fontSize: 16,
+                fontWeight: 600
+              }}
+            >
+              ₹{format2(totalValue)}
+            </text>
+
+            <Tooltip
+              contentStyle={{
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                color: theme.text
+              }}
+              formatter={(value, name, props) => [
+                `₹${format2(value)}`,
+                props.payload.name
+              ]}
+            />
+          </PieChart>
+        </div>
+
+        <div style={{ width: "100%" }}>
+          {renderCustomLegend(sectorData)}
+        </div>
       </div>
-
-      {renderCustomLegend(sectorData)}
     </div>
 
-    {/* Asset */}
-    <div className="card" style={{
-  flex: 1,
-  minWidth: 0,        // 🔥 critical
-  width: "100%"
-}}>
-      <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <PieChartIcon size={18} strokeWidth={1.5} />
-  Asset Allocation
-</h3>
 
-{/* ✅ Responsive wrapper */}
-<div
-  style={{
-    width: "100%",
-    display: "flex",
-    justifyContent: "center"
-  }}
->
-  <PieChart width={280} height={260}>
-
-    <Pie
-      data={assetData}
-      dataKey="value"
-      innerRadius={70}   // 🔥 slightly reduced for smaller screens
-      outerRadius={110}
+    {/* ================= ASSET ================= */}
+    <div
+      className="card"
+      style={{
+        flex: 1,
+        minWidth: 0,
+        width: "100%"
+      }}
     >
-      {assetData.map((_, i) => (
-        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-      ))}
-    </Pie>
+      <h3
+        style={{
+          color: theme.text,
+          display: "flex",
+          alignItems: "center",
+          gap: 8
+        }}
+      >
+        <PieChartIcon size={18} strokeWidth={1.5} />
+        Asset Allocation
+      </h3>
 
-        {/* ✅ CENTER TEXT (CORRECT TOTAL) */}
-        <text
-          x="50%"
-          y="45%"
-          textAnchor="middle"
-          style={{ fill: dark ? "#9ca3af" : "#6b7280", fontSize: 11 }}
-        >
-          Total
-        </text>
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12
+        }}
+      >
+        <div style={{ width: "100%", height: 260 }}>
+          <PieChart width="100%" height={260}>
+            <Pie
+              data={assetData}
+              dataKey="value"
+              innerRadius={60}
+              outerRadius={90}
+            >
+              {assetData.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
 
-        <text
-          x="50%"
-          y="55%"
-          textAnchor="middle"
-          style={{ fill: dark ? "#fff" : "#111827", fontSize: 16, fontWeight: 600 }}
-        >
-          ₹{format2(
-            assetData.reduce((s, d) => s + d.value, 0)
-          )}
-        </text>
+            <text
+              x="50%"
+              y="45%"
+              textAnchor="middle"
+              style={{
+                fill: dark ? "#9ca3af" : "#6b7280",
+                fontSize: 11
+              }}
+            >
+              Total
+            </text>
 
-        {/* Tooltip */}
-        <Tooltip
-  contentStyle={{
-    background: theme.card,
-    border: `1px solid ${theme.border}`,
-    color: theme.text
-  }}
-  formatter={(value, name, props) => [
-    `₹${format2(value)}`,
-    props.payload.name
-  ]}
-/>
-      </PieChart>
-      </div>
+            <text
+              x="50%"
+              y="55%"
+              textAnchor="middle"
+              style={{
+                fill: dark ? "#fff" : "#111827",
+                fontSize: 16,
+                fontWeight: 600
+              }}
+            >
+              ₹{format2(
+                assetData.reduce((s, d) => s + d.value, 0)
+              )}
+            </text>
 
-      <div style={{ marginTop: 10 }}>
-        {renderCustomLegend(assetData)}
+            <Tooltip
+              contentStyle={{
+                background: theme.card,
+                border: `1px solid ${theme.border}`,
+                color: theme.text
+              }}
+              formatter={(value, name, props) => [
+                `₹${format2(value)}`,
+                props.payload.name
+              ]}
+            />
+          </PieChart>
+        </div>
+
+        <div style={{ width: "100%" }}>
+          {renderCustomLegend(assetData)}
+        </div>
       </div>
     </div>
 
   </div>
 )}
-
 
        {/* INSIGHTS */}
 {view === "insights" && (

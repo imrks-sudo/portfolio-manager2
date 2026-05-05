@@ -80,7 +80,7 @@ body {
   box-shadow: none;
   transition: all 0.2s ease;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .app {
@@ -141,6 +141,18 @@ body {
   margin-bottom: 18px;
 }
 
+/* ================= FLEX ================= */
+.flex {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.flex > * {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
 .section-title {
   font-size: 11px;
   opacity: 0.6;
@@ -148,11 +160,7 @@ body {
   letter-spacing: 1px;
 }
 /* ================= FLEX ================= */
-.flex {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-}
+
 
 /* ================= TITLES ================= */
 h1 {
@@ -185,9 +193,14 @@ h3 {
 /* ================= FIRE GRID ================= */
 .fire-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
-  margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+  .fire-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .slider-group {
@@ -350,39 +363,24 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
-  /* 🔥 IMPORTANT: keep sidebar available for drawer */
+  .card {
+    width: 100% !important;
+  }
+
   .sidebar {
     display: block;
   }
 
-  /* Prevent input overflow */
   input {
     min-width: 0;
   }
 
-  /* Main container fix (no clipping) */
   .main {
     flex: 1;
     padding: 16px;
     min-width: 0;
   }
 
-    .flex {
-    flex-direction: column !important;
-    gap: 12px;
-  }
-
-  .flex > * {
-    flex: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  .fire-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* FIRE planner internal overflow fix */
   .slider-group {
     min-width: 0;
   }
@@ -391,6 +389,7 @@ button:hover {
     flex-wrap: wrap;
   }
 }
+
 
 /* 🔥 FORCE LIGHT */
 .suggestions {
@@ -471,7 +470,7 @@ button:hover {
     left: 0;
     height: 100%;
     width: 220px;
-    z-index: 1000;
+    z-index: 2000;
     transform: translateX(-100%);
   }
 
@@ -488,11 +487,6 @@ button:hover {
   }
 }
 
-.flex > * {
-  flex: 1 1 260px;   /* 👈 REDUCE THIS */
-  min-width: 0;
-  max-width: 100%;
-}
 
 .card,
 .fire-grid,
@@ -523,35 +517,43 @@ body {
   flex-wrap: wrap;
 }
 
-@media (max-width: 1400px) {
-  .flex > * {
-    flex: 1 1 calc(50% - 14px); /* 👈 2 columns */
-  }
-}
-
-.recharts-wrapper {
-  max-width: 100% !important;
-}
 
 .fire-grid input {
   width: 100%;
   max-width: 100%;
 }
 
-/* 🔥 FINAL MOBILE FIX (OVERRIDE EVERYTHING ABOVE) */
-@media (max-width: 900px) {
-  .flex > * {
-    flex: 1 1 100% !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-}
-
-.recharts-surface {
-  max-width: 100% !important;
-}
 
 html, body, #root {
   overflow-x: hidden;
   max-width: 100%;
+}
+
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recharts-wrapper,
+.recharts-surface,
+.recharts-legend-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Tablet */
+@media (max-width: 1200px) {
+  .flex > * {
+    flex: 1 1 calc(50% - 14px);
+  }
+}
+
+
+@media (max-width: 900px) {
+  .flex {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
