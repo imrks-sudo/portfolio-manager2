@@ -80,7 +80,7 @@ body {
   box-shadow: none;
   transition: all 0.2s ease;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .app {
@@ -536,13 +536,6 @@ html, body, #root {
   min-width: 0;
 }
 
-.recharts-wrapper,
-.recharts-surface,
-.recharts-legend-wrapper {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
 /* Tablet */
 @media (max-width: 1200px) {
   .flex > * {
@@ -555,5 +548,16 @@ html, body, #root {
   .flex {
     flex-direction: column;
     gap: 12px;
+  }
+}
+
+.fire-grid {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .analytics-container {
+    flex-direction: column !important;
   }
 }

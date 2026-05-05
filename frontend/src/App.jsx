@@ -22,6 +22,7 @@ import {
   Pie,
   Cell,
   Tooltip,
+  ResponsiveContainer,
 } from "recharts";
 
 
@@ -4052,10 +4053,13 @@ const clampedPosition = Math.max(0, Math.min(100, position));
         {/* ANALYTICS */}
 {view === "analytics" && (
   <div
+    className="analytics-container"
     style={{
       display: "flex",
       gap: 20,
-      flexWrap: "wrap"
+      flexWrap: "wrap",
+      alignItems: "stretch",
+      width: "100%" // ✅ CRITICAL
     }}
   >
 
@@ -4063,16 +4067,15 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     <div
       className="card"
       style={{
-        flex: 1,
-        minWidth: 0,
-        width: "100%"
+        flex: "1 1 400px",
+        minWidth: 300
       }}
     >
       <h3
         style={{
           color: theme.text,
           display: "flex",
-          alignItems: "center",
+          alignItems: "stretch", // ✅ FIX
           gap: 8
         }}
       >
@@ -4085,60 +4088,64 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           width: "100%",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
+          alignItems: "stretch", // ✅ FIX
           gap: 12
         }}
       >
-        <div style={{ width: "100%", height: 260 }}>
-          <PieChart width="100%" height={260}>
-            <Pie
-              data={sectorData}
-              dataKey="value"
-              innerRadius={60}
-              outerRadius={90}
-            >
-              {sectorData.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
+        <div
+          style={{
+            width: "100%",
+            height: 260,
+            minWidth: 0,
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={sectorData}
+                dataKey="value"
+                innerRadius={60}
+                outerRadius={90}
+              >
+                {sectorData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
 
-            <text
-              x="50%"
-              y="45%"
-              textAnchor="middle"
-              style={{
-                fill: dark ? "#9ca3af" : "#6b7280",
-                fontSize: 11
-              }}
-            >
-              Total
-            </text>
+              <text
+                x="50%"
+                y="45%"
+                textAnchor="middle"
+                style={{
+                  fill: dark ? "#9ca3af" : "#6b7280",
+                  fontSize: 11
+                }}
+              >
+                Total
+              </text>
 
-            <text
-              x="50%"
-              y="55%"
-              textAnchor="middle"
-              style={{
-                fill: dark ? "#fff" : "#111827",
-                fontSize: 16,
-                fontWeight: 600
-              }}
-            >
-              ₹{format2(totalValue)}
-            </text>
+              <text
+                x="50%"
+                y="55%"
+                textAnchor="middle"
+                style={{
+                  fill: dark ? "#fff" : "#111827",
+                  fontSize: 16,
+                  fontWeight: 600
+                }}
+              >
+                ₹{format2(totalValue)}
+              </text>
 
-            <Tooltip
-              contentStyle={{
-                background: theme.card,
-                border: `1px solid ${theme.border}`,
-                color: theme.text
-              }}
-              formatter={(value, name, props) => [
-                `₹${format2(value)}`,
-                props.payload.name
-              ]}
-            />
-          </PieChart>
+              <Tooltip
+                contentStyle={{
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.text
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
 
         <div style={{ width: "100%" }}>
@@ -4152,16 +4159,15 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     <div
       className="card"
       style={{
-        flex: 1,
-        minWidth: 0,
-        width: "100%"
+        flex: "1 1 400px",
+        minWidth: 300
       }}
     >
       <h3
         style={{
           color: theme.text,
           display: "flex",
-          alignItems: "center",
+          alignItems: "stretch", // ✅ FIX
           gap: 8
         }}
       >
@@ -4174,62 +4180,66 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           width: "100%",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
+          alignItems: "stretch", // ✅ FIX
           gap: 12
         }}
       >
-        <div style={{ width: "100%", height: 260 }}>
-          <PieChart width="100%" height={260}>
-            <Pie
-              data={assetData}
-              dataKey="value"
-              innerRadius={60}
-              outerRadius={90}
-            >
-              {assetData.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
+        <div
+          style={{
+            width: "100%",
+            height: 260,
+            minWidth: 0,
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={assetData}
+                dataKey="value"
+                innerRadius={60}
+                outerRadius={90}
+              >
+                {assetData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
 
-            <text
-              x="50%"
-              y="45%"
-              textAnchor="middle"
-              style={{
-                fill: dark ? "#9ca3af" : "#6b7280",
-                fontSize: 11
-              }}
-            >
-              Total
-            </text>
+              <text
+                x="50%"
+                y="45%"
+                textAnchor="middle"
+                style={{
+                  fill: dark ? "#9ca3af" : "#6b7280",
+                  fontSize: 11
+                }}
+              >
+                Total
+              </text>
 
-            <text
-              x="50%"
-              y="55%"
-              textAnchor="middle"
-              style={{
-                fill: dark ? "#fff" : "#111827",
-                fontSize: 16,
-                fontWeight: 600
-              }}
-            >
-              ₹{format2(
-                assetData.reduce((s, d) => s + d.value, 0)
-              )}
-            </text>
+              <text
+                x="50%"
+                y="55%"
+                textAnchor="middle"
+                style={{
+                  fill: dark ? "#fff" : "#111827",
+                  fontSize: 16,
+                  fontWeight: 600
+                }}
+              >
+                ₹{format2(
+                  assetData.reduce((s, d) => s + d.value, 0)
+                )}
+              </text>
 
-            <Tooltip
-              contentStyle={{
-                background: theme.card,
-                border: `1px solid ${theme.border}`,
-                color: theme.text
-              }}
-              formatter={(value, name, props) => [
-                `₹${format2(value)}`,
-                props.payload.name
-              ]}
-            />
-          </PieChart>
+              <Tooltip
+                contentStyle={{
+                  background: theme.card,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.text
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
 
         <div style={{ width: "100%" }}>
