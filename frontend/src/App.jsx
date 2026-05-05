@@ -353,6 +353,7 @@ function App() {
   const requestIdRef = useRef(0);
   const inputRef = useRef(null);
   const [niftyPct, setNiftyPct] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -1777,20 +1778,66 @@ if (!profile) {
 >
 
 <aside
-  className="sidebar"
+  className={`sidebar ${sidebarOpen ? "open" : ""}`}
   style={{
     background: theme.card,
     color: theme.text,
     borderRight: `1px solid ${theme.border}`,
     width: 220,
-    minWidth: 220
+    minWidth: 220,
+    position: "relative"
   }}
 >
-  <h2>watchmyfolio</h2>
+
+<div style={{ marginBottom: 16 }}>
+  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <span
+      style={{
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #22c55e, #3b82f6)"
+      }}
+    />
+    <span
+      style={{
+        fontWeight: 600,
+        fontSize: 18,
+        color: "var(--text-primary)"
+      }}
+    >
+      watch
+      <span style={{ color: "#22c55e" }}>my</span>
+      <span style={{ color: "#3b82f6" }}>folio</span>
+    </span>
+  </div>
+</div>
+
+{/* ❌ CLOSE BUTTON (mobile only) */}
+<button
+  className="close-btn"
+  onClick={() => setSidebarOpen(false)}
+  style={{
+    display: "none",
+    position: "absolute",
+    top: 10,
+    right: 10,
+    background: "none",
+    border: "none",
+    fontSize: 18,
+    color: theme.text,
+    cursor: "pointer"
+  }}
+>
+  ✕
+</button>
 
   {/* DASHBOARD */}
   <div
-    onClick={() => setView("dashboard")}
+    onClick={() => {
+  setView("dashboard");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1808,7 +1855,10 @@ if (!profile) {
 
   {/* ANALYTICS */}
   <div
-    onClick={() => setView("analytics")}
+    onClick={() => {
+  setView("analytics");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1826,7 +1876,10 @@ if (!profile) {
 
   {/* INSIGHTS */}
   <div
-    onClick={() => setView("insights")}
+    onClick={() => {
+  setView("insights");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1844,7 +1897,10 @@ if (!profile) {
 
   {/* HELP */}
   <div
-    onClick={() => setView("help")}
+    onClick={() => {
+  setView("help");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1862,7 +1918,10 @@ if (!profile) {
 
   {/* ABOUT */}
   <div
-    onClick={() => setView("about")}
+    onClick={() => {
+  setView("about");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1880,7 +1939,10 @@ if (!profile) {
 
   {/* SUPPORT */}
   <div
-    onClick={() => setView("support")}
+    onClick={() => {
+  setView("support");
+  setSidebarOpen(false);
+}}
     style={{
       display: "flex",
       alignItems: "center",
@@ -1936,6 +1998,21 @@ if (!profile) {
 </div>
 </aside>
 
+{sidebarOpen && (
+  <div
+    onClick={() => setSidebarOpen(false)}
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "rgba(0,0,0,0.4)",
+      zIndex: 998
+    }}
+  />
+)}
+
       <main
   className="main"
   style={{
@@ -1956,6 +2033,25 @@ if (!profile) {
   }}
 >
 
+<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+  
+  {/* ☰ MOBILE MENU BUTTON */}
+  <button
+    className="mobile-menu-btn"
+    onClick={() => setSidebarOpen(true)}
+    style={{
+      display: "none",
+      fontSize: 20,
+      background: "none",
+      border: "none",
+      color: theme.text,
+      cursor: "pointer"
+    }}
+  >
+    ☰
+  </button>
+
+
   {/* LEFT */}
   <div>
     <h2 style={{ marginBottom: 4 }}>
@@ -1966,6 +2062,7 @@ if (!profile) {
   {todayText}
 </p>
   </div>
+   </div>
 
   {showProfileModal && (
   <div
