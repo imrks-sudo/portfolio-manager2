@@ -367,15 +367,19 @@ button:hover {
     min-width: 0;
   }
 
-  /* 🔥 KEY FIX: stack analytics + insights ONLY on mobile */
-  .flex {
-    flex-direction: column;
+    .flex {
+    flex-direction: column !important;
+    gap: 12px;
   }
 
-  /* Ensure cards shrink properly */
   .flex > * {
-    width: 100%;
-    min-width: 0;
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .fire-grid {
+    grid-template-columns: 1fr;
   }
 
   /* FIRE planner internal overflow fix */
@@ -523,4 +527,31 @@ body {
   .flex > * {
     flex: 1 1 calc(50% - 14px); /* 👈 2 columns */
   }
+}
+
+.recharts-wrapper {
+  max-width: 100% !important;
+}
+
+.fire-grid input {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* 🔥 FINAL MOBILE FIX (OVERRIDE EVERYTHING ABOVE) */
+@media (max-width: 900px) {
+  .flex > * {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+.recharts-surface {
+  max-width: 100% !important;
+}
+
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100%;
 }

@@ -4061,21 +4061,43 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   >
 
     {/* Sector */}
-    <div className="card" style={{ flex: 1, minWidth: 420 }}>
-      <h3 style={{ color: theme.text }}>Sector</h3>
+    <div className="card" style={{
+  flex: 1,
+  minWidth: 0,        // 🔥 critical
+  width: "100%"
+}}>
+      <h3
+  style={{
+    color: theme.text,
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  }}
+>
+  <PieChartIcon size={18} strokeWidth={1.5} />
+  Asset Allocation
+</h3>
 
-      <PieChart width={340} height={300}>
+{/* ✅ Responsive wrapper */}
+<div
+  style={{
+    width: "100%",
+    display: "flex",
+    justifyContent: "center"
+  }}
+>
+  <PieChart width={280} height={260}>
 
-        <Pie
-          data={sectorData}
-          dataKey="value"
-          innerRadius={80}
-          outerRadius={120}
-        >
-          {sectorData.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Pie>
+    <Pie
+      data={assetData}
+      dataKey="value"
+      innerRadius={70}   // 🔥 slightly reduced for smaller screens
+      outerRadius={110}
+    >
+      {assetData.map((_, i) => (
+        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+      ))}
+    </Pie>
 
         {/* ✅ CENTER TEXT (CORRECT PLACE) */}
         <text
@@ -4109,12 +4131,17 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   ]}
 />
       </PieChart>
+      </div>
 
       {renderCustomLegend(sectorData)}
     </div>
 
     {/* Asset */}
-    <div className="card" style={{ flex: 1, minWidth: 420 }}>
+    <div className="card" style={{
+  flex: 1,
+  minWidth: 0,        // 🔥 critical
+  width: "100%"
+}}>
       <h3
   style={{
     color: theme.text,
@@ -4127,18 +4154,26 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   Asset Allocation
 </h3>
 
-      <PieChart width={340} height={300}>
+{/* ✅ Responsive wrapper */}
+<div
+  style={{
+    width: "100%",
+    display: "flex",
+    justifyContent: "center"
+  }}
+>
+  <PieChart width={280} height={260}>
 
-        <Pie
-          data={assetData}
-          dataKey="value"
-          innerRadius={80}
-          outerRadius={120}
-        >
-          {assetData.map((_, i) => (
-            <Cell key={i} fill={COLORS[i % COLORS.length]} />
-          ))}
-        </Pie>
+    <Pie
+      data={assetData}
+      dataKey="value"
+      innerRadius={70}   // 🔥 slightly reduced for smaller screens
+      outerRadius={110}
+    >
+      {assetData.map((_, i) => (
+        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+      ))}
+    </Pie>
 
         {/* ✅ CENTER TEXT (CORRECT TOTAL) */}
         <text
@@ -4174,6 +4209,7 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   ]}
 />
       </PieChart>
+      </div>
 
       <div style={{ marginTop: 10 }}>
         {renderCustomLegend(assetData)}
