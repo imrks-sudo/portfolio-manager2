@@ -89,7 +89,7 @@ body {
   box-shadow: none;
   transition: all 0.2s ease;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .app {

@@ -4248,39 +4248,60 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   </div>
 )}
 
-       {/* INSIGHTS */}
+{/* INSIGHTS */}
 {view === "insights" && (
-  <div className="card" style={{ marginBottom: 20, padding: 20 }}>
+  <div
+    className="card"
+    style={{
+      marginBottom: 20,
+      padding: 20,
+      width: "100%",
+      maxWidth: "100%",
+      boxSizing: "border-box",
+      overflow: "hidden"
+    }}
+  >
 
     <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <Flame size={18} strokeWidth={1.5} />
-  FIRE Planner
-</h3>
+      style={{
+        color: theme.text,
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }}
+    >
+      <Flame size={18} strokeWidth={1.5} />
+      FIRE Planner
+    </h3>
 
-    {/* 🔹 LEFT + RIGHT WRAPPER */}
-    <div style={{
-      display: "flex",
-      gap: 20,
-      flexWrap: "wrap"
-    }}>
+    {/* 🔹 MAIN WRAPPER */}
+    <div
+      style={{
+        display: "flex",
+        gap: 20,
+        flexWrap: "wrap",
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        alignItems: "stretch"
+      }}
+    >
 
       {/* 🔹 LEFT → INPUTS */}
-      <div style={{
-        flex: 1,
-        minWidth: 320,
-        maxWidth: 420,
-        background: theme.card,
-        padding: 16,
-        borderRadius: 12,
-        border: `1px solid ${theme.border}`
-      }}>
+      <div
+        style={{
+          flex: "1 1 340px",
+          minWidth: 0,
+          width: "100%",
+          maxWidth: "100%",
+          background: theme.card,
+          padding: 16,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          boxSizing: "border-box",
+          overflow: "hidden"
+        }}
+      >
 
         {[
           { label: "Return (%)", value: rate, set: setRate, min: 0, max: 20 },
@@ -4289,14 +4310,29 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           { label: "FIRE Target", value: fireTarget, set: setFireTarget, min: 0, max: 200000000 },
           { label: "Monthly SIP", value: sip, set: setSip, min: 0, max: 200000 },
         ].map((item) => (
-          <div key={item.label} style={{ marginBottom: 18 }}>
+          <div
+            key={item.label}
+            style={{
+              marginBottom: 18,
+              width: "100%"
+            }}
+          >
 
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 6
-            }}>
-              <span style={{ fontSize: 12, color: theme.subText }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                marginBottom: 6,
+                flexWrap: "wrap"
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  color: theme.subText
+                }}
+              >
                 {item.label}
               </span>
 
@@ -4306,18 +4342,25 @@ const clampedPosition = Math.max(0, Math.min(100, position));
                 onChange={(e) => item.set(Number(e.target.value) || 0)}
                 style={{
                   width: 100,
+                  maxWidth: "100%",
                   background: theme.card,
                   border: `1px solid ${theme.border}`,
                   borderRadius: 6,
                   padding: "4px 6px",
                   color: theme.text,
                   fontSize: 12,
-                  textAlign: "right"
+                  textAlign: "right",
+                  boxSizing: "border-box"
                 }}
               />
             </div>
 
-            <div style={{ maxWidth: 300 }}>
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "100%"
+              }}
+            >
               <input
                 type="range"
                 min={item.min}
@@ -4335,7 +4378,12 @@ const clampedPosition = Math.max(0, Math.min(100, position));
           </div>
         ))}
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end"
+          }}
+        >
           <button
             onClick={resetCalculator}
             style={{
@@ -4354,88 +4402,120 @@ const clampedPosition = Math.max(0, Math.min(100, position));
       </div>
 
       {/* 🔹 RIGHT → OUTPUT */}
-      <div style={{
-        flex: 1,
-        minWidth: 320,
-        display: "flex",
-        flexDirection: "column",
-        gap: 14
-      }}>
+      <div
+        style={{
+          flex: "1 1 340px",
+          minWidth: 0,
+          width: "100%",
+          maxWidth: "100%",
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          boxSizing: "border-box"
+        }}
+      >
 
-        <div style={{
-          background: theme.card,
-          padding: 18,
-          borderRadius: 12,
-          border: `1px solid ${theme.border}`
-        }}>
+        <div
+          style={{
+            background: theme.card,
+            padding: 18,
+            borderRadius: 12,
+            border: `1px solid ${theme.border}`,
+            boxSizing: "border-box"
+          }}
+        >
           <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <Target size={18} strokeWidth={1.5} />
-  FIRE Target
-</h3>
-          <h2>{cleanData.length ? `₹${futureValue.toLocaleString()}` : "-"}</h2>
+            style={{
+              color: theme.text,
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <Target size={18} strokeWidth={1.5} />
+            FIRE Target
+          </h3>
+
+          <h2>
+            {cleanData.length
+              ? `₹${futureValue.toLocaleString()}`
+              : "-"}
+          </h2>
         </div>
 
-        <div style={{
-          background: theme.card,
-          padding: 18,
-          borderRadius: 12,
-          border: `1px solid ${theme.border}`
-        }}>
+        <div
+          style={{
+            background: theme.card,
+            padding: 18,
+            borderRadius: 12,
+            border: `1px solid ${theme.border}`,
+            boxSizing: "border-box"
+          }}
+        >
           <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <TrendingUp size={18} strokeWidth={1.5} />
-  Monthly SIP Needed
-</h3>
-          <h2>{cleanData.length ? `₹${requiredSip.toLocaleString()}` : "-"}</h2>
+            style={{
+              color: theme.text,
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <TrendingUp size={18} strokeWidth={1.5} />
+            Monthly SIP Needed
+          </h3>
+
+          <h2>
+            {cleanData.length
+              ? `₹${requiredSip.toLocaleString()}`
+              : "-"}
+          </h2>
         </div>
 
-        <div style={{
-          background: theme.card,
-          padding: 18,
-          borderRadius: 12,
-          border: `1px solid ${theme.border}`
-        }}>
+        <div
+          style={{
+            background: theme.card,
+            padding: 18,
+            borderRadius: 12,
+            border: `1px solid ${theme.border}`,
+            boxSizing: "border-box"
+          }}
+        >
           <h3
-  style={{
-    color: theme.text,
-    display: "flex",
-    alignItems: "center",
-    gap: 8
-  }}
->
-  <BarChart3 size={18} strokeWidth={1.5} />
-  Progress
-</h3>
+            style={{
+              color: theme.text,
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <BarChart3 size={18} strokeWidth={1.5} />
+            Progress
+          </h3>
 
-          <h2>{cleanData.length ? `${progress.toFixed(1)}%` : "-"}</h2>
+          <h2>
+            {cleanData.length
+              ? `${progress.toFixed(1)}%`
+              : "-"}
+          </h2>
 
-          <div style={{
-            height: 6,
-            background: dark ? "#1f2937" : "#e5e7eb",
-            borderRadius: 6,
-            marginTop: 10,
-            overflow: "hidden"
-          }}>
-            <div style={{
-              width: `${progress}%`,
-              background: "#3b82f6",
-              height: "100%",
+          <div
+            style={{
+              height: 6,
+              background: dark ? "#1f2937" : "#e5e7eb",
               borderRadius: 6,
-              transition: "width 0.4s ease"
-            }} />
+              marginTop: 10,
+              overflow: "hidden"
+            }}
+          >
+            <div
+              style={{
+                width: `${progress}%`,
+                background: "#3b82f6",
+                height: "100%",
+                borderRadius: 6,
+                transition: "width 0.4s ease"
+              }}
+            />
           </div>
         </div>
 
