@@ -365,6 +365,11 @@ function HoldingCard({
   dark,
   onEdit,
   onDelete,
+  isEditing,
+  editForm,
+  setEditForm,
+  onSave,
+  onCancel,
 }) {
   const isGain = (d.pnl || 0) >= 0;
 
@@ -407,39 +412,92 @@ function HoldingCard({
 
           <RiskBadge d={d} />
         </div>
-
+      
         <div style={{ display: "flex", gap: 6 }}>
-          <button
-            onClick={onEdit}
-            style={{
-              background: "transparent",
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              padding: "4px 8px",
-              fontSize: 12,
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
-          >
-            ✏️
-          </button>
+  {isEditing ? (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSave?.();
+        }}
+        style={{
+          padding: "4px 6px",
+          borderRadius: 4,
+          background: "#22c55e",
+          border: "none",
+          color: "#fff",
+          cursor: "pointer",
+          fontSize: 12,
+        }}
+        title="Save"
+      >
+        ✅
+      </button>
 
-          <button
-            onClick={onDelete}
-            style={{
-              background: "transparent",
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              padding: "4px 8px",
-              fontSize: 12,
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
-          >
-            🗑
-          </button>
-        </div>
-      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onCancel?.();
+        }}
+        style={{
+          padding: "4px 8px",
+          borderRadius: 6,
+          background: dark ? "#1f2937" : "#f3f4f6",
+          border: "none",
+          color: theme.text,
+          cursor: "pointer",
+          fontSize: 12,
+        }}
+        title="Cancel"
+      >
+        ❌
+      </button>
+    </>
+  ) : (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onEdit?.();
+        }}
+        style={{
+          background: "transparent",
+          border: `1px solid ${theme.border}`,
+          color: theme.text,
+          padding: "4px 8px",
+          fontSize: 12,
+          borderRadius: 6,
+          cursor: "pointer",
+        }}
+        title="Edit"
+      >
+        ✏️
+      </button>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete?.();
+        }}
+        style={{
+          background: "transparent",
+          border: `1px solid ${theme.border}`,
+          color: theme.text,
+          padding: "4px 8px",
+          fontSize: 12,
+          borderRadius: 6,
+          cursor: "pointer",
+        }}
+        title="Delete"
+      >
+        🗑
+      </button>
+    </>
+  )}
+</div>
+</div>
+        
 
       {/* SECTOR */}
       {d.sector && (
@@ -455,38 +513,96 @@ function HoldingCard({
 
       {/* GRID */}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 6,
-        }}
-      >
-        <MiniStat
-          label="Qty"
-          value={d.quantity}
-          theme={theme}
-        />
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 6,
+  }}
+>
+{isEditing ? (
+  <input
+    type="number"
+    value={editForm.quantity}
+    onChange={(e) =>
+      setEditForm({
+        ...editForm,
+        quantity: e.target.value,
+      })
+    }
+    style={{
+      width: "100%",
+      padding: "6px",
+      borderRadius: 6,
+      border: `1px solid ${theme.border}`,
+      background: theme.card,
+      color: theme.text,
+    }}
+  />
+) : (
+  <MiniStat
+    label="Qty"
+    value={d.quantity}
+    theme={theme}
+  />
+)}
 
-        <MiniStat
-          label="Avg"
-          value={`₹${d.avgPrice}`}
-          theme={theme}
-        />
+{isEditing ? (
+  <input
+    type="number"
+    value={editForm.avgPrice}
+    onChange={(e) =>
+      setEditForm({
+        ...editForm,
+        avgPrice: e.target.value,
+      })
+    }
+    style={{
+      width: "100%",
+      padding: "6px",
+      borderRadius: 6,
+      border: `1px solid ${theme.border}`,
+      background: theme.card,
+      color: theme.text,
+    }}
+  />
+) : (
+  <MiniStat
+    label="Avg"
+    value={`₹${d.avgPrice}`}
+    theme={theme}
+  />
+)}
 
-        <MiniStat
-          label="Price"
-          value={`₹${d.currentPrice?.toFixed(2) || 0}`}
-          theme={theme}
-        />
+  <MiniStat
+    label="Price"
+    value={`₹${d.currentPrice?.toFixed(2) || 0}`}
+    theme={theme}
+  />
 
-        <MiniStat
-          label="Value"
-          value={`₹${Math.round(
-            d.currentValue || 0
-          ).toLocaleString("en-IN")}`}
-          theme={theme}
-        />
-      </div>
+  <MiniStat
+    label="Value"
+    value={`₹${Math.round(
+      d.currentValue || 0
+    ).toLocaleString("en-IN")}`}
+    theme={theme}
+  />
+
+  {d.high52 && (
+    <MiniStat
+      label="52W High"
+      value={`₹${Number(d.high52).toFixed(2)}`}
+      theme={theme}
+    />
+  )}
+
+  {d.low52 && (
+    <MiniStat
+      label="52W Low"
+      value={`₹${Number(d.low52).toFixed(2)}`}
+      theme={theme}
+    />
+  )}
+</div>
 
       {/* PNL */}
       <div
@@ -574,6 +690,12 @@ function App() {
   const [niftyPct, setNiftyPct] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
+  // 🔥 ensure correct profile is used
+  useEffect(() => {
+    if (profile) {
+      fetchData();
+    }
+  }, [profile]);
 
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -616,13 +738,6 @@ const handleProfileCreate = (name) => {
 
   setActiveProfile(trimmed);
   setProfile(trimmed);
-
-  // 🔥 ensure correct profile is used
-  useEffect(() => {
-  if (profile) {
-    fetchData();
-  }
-}, [profile]);
 
   // 🔥 referral tracking
   const ref = localStorage.getItem("referral");
@@ -4334,36 +4449,60 @@ const clampedPosition = Math.max(0, Math.min(100, position));
                 gap: 12,
               }}
             >
-              {filteredData.map((d, idx) => (
+              {filteredData.map((d) => (
                 <HoldingCard
-                  key={idx}
-                  d={d}
-                  theme={theme}
-                  dark={dark}
-                  onEdit={() => {
-                    setEditingId(d.symbol);
-            
-                    setEditForm({
-                      symbol: d.symbol,
-                      quantity: d.quantity,
-                      avgPrice: d.avgPrice,
-                    });
-                  }}
-                  onDelete={() => {
-                    if (
-                      window.confirm(
-                        `Delete ${d.symbol}?`
-                      )
-                    ) {
-                      const updated = cleanData.filter(
-                        (x) => x.symbol !== d.symbol
-                      );
-            
-                      setData(updated);
-                      saveLocalPortfolio(updated);
-                    }
-                  }}
-                />
+                key={d.symbol}
+                d={d}
+                theme={theme}
+                dark={dark}
+              
+                isEditing={editingId === d.symbol}
+                editForm={editForm}
+                setEditForm={setEditForm}
+              
+                onEdit={() => {
+                  setEditingId(d.symbol);
+              
+                  setEditForm({
+                    symbol: d.symbol,
+                    quantity: d.quantity,
+                    avgPrice: d.avgPrice,
+                  });
+                }}
+              
+                onSave={() => {
+                  const updated = data.map((item) =>
+                    item.symbol === d.symbol
+                      ? {
+                          ...item,
+                          symbol: editForm.symbol.trim().toUpperCase(),
+                          quantity: Number(editForm.quantity),
+                          avgPrice: Number(editForm.avgPrice),
+                        }
+                      : item
+                  );
+              
+                  setData(updated);
+                  saveLocalPortfolio(updated);
+                  refreshProfiles();
+                  setEditingId(null);
+                }}
+              
+                onCancel={() => {
+                  setEditingId(null);
+                }}
+              
+                onDelete={() => {
+                  if (window.confirm(`Delete ${d.symbol}?`)) {
+                    const updated = cleanData.filter(
+                      (x) => x.symbol !== d.symbol
+                    );
+              
+                    setData(updated);
+                    saveLocalPortfolio(updated);
+                  }
+                }}
+              />
               ))}
             </div>
             
