@@ -84,7 +84,11 @@ const getActiveProfile = () => {
 
 const getAllProfiles = () => {
   return Object.keys(localStorage)
-    .filter((k) => k.startsWith("portfolio_"))
+    .filter(
+      (k) =>
+        k.startsWith("portfolio_") &&
+        !k.includes("history")
+    )
     .map((k) => k.replace("portfolio_", ""));
 };
 
@@ -786,9 +790,13 @@ const fetchNiftyChange = async () => {
   const [showPreview, setShowPreview] = useState(false);
   const [profiles, setProfiles] = useState(() => {
   return Object.keys(localStorage)
-    .filter((k) => k.startsWith("portfolio_"))
+    .filter(
+      (k) =>
+        k.startsWith("portfolio_") &&
+        !k.includes("history")
+    )
     .map((k) => k.replace("portfolio_", ""));
-  });
+});
 
 useEffect(() => {
   const handleClickOutside = (event) => {
@@ -990,7 +998,11 @@ const handleAdd = async () => {
 
 const refreshProfiles = () => {
   const list = Object.keys(localStorage)
-    .filter((k) => k.startsWith("portfolio_"))
+    .filter(
+      (k) =>
+        k.startsWith("portfolio_") &&
+        !k.includes("history")
+    )
     .map((k) => k.replace("portfolio_", ""));
 
   setProfiles(list);
