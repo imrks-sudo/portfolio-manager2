@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 import posthog from 'posthog-js';
+import History, { saveSnapshot } from "./components/History";
 
 import {
   LayoutDashboard,
@@ -326,6 +327,223 @@ if (!tooltip) {
   return { label: "LOW", color: "#22c55e", tooltip };
 };
 
+function MiniStat({ label, value, theme }) {
+  return (
+    <div
+      style={{
+        background: "rgba(0,0,0,0.03)",
+        borderRadius: 6,
+        padding: "5px 8px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: theme.subText,
+          marginBottom: 1,
+        }}
+      >
+        {label}
+      </div>
+
+      <div
+        style={{
+          fontSize: 13,
+          color: theme.text,
+          fontWeight: 500,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function HoldingCard({
+  d,
+  theme,
+  dark,
+  onEdit,
+  onDelete,
+}) {
+  const isGain = (d.pnl || 0) >= 0;
+
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: `1px solid ${theme.border}`,
+        background: theme.card,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      {/* TOP */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: 14,
+              color: theme.text,
+            }}
+          >
+            {d.symbol}
+          </span>
+
+          <RiskBadge d={d} />
+        </div>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            onClick={onEdit}
+            style={{
+              background: "transparent",
+              border: `1px solid ${theme.border}`,
+              color: theme.text,
+              padding: "4px 8px",
+              fontSize: 12,
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            ✏️
+          </button>
+
+          <button
+            onClick={onDelete}
+            style={{
+              background: "transparent",
+              border: `1px solid ${theme.border}`,
+              color: theme.text,
+              padding: "4px 8px",
+              fontSize: 12,
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            🗑
+          </button>
+        </div>
+      </div>
+
+      {/* SECTOR */}
+      {d.sector && (
+        <span
+          style={{
+            fontSize: 11,
+            color: theme.subText,
+          }}
+        >
+          {d.sector}
+        </span>
+      )}
+
+      {/* GRID */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 6,
+        }}
+      >
+        <MiniStat
+          label="Qty"
+          value={d.quantity}
+          theme={theme}
+        />
+
+        <MiniStat
+          label="Avg"
+          value={`₹${d.avgPrice}`}
+          theme={theme}
+        />
+
+        <MiniStat
+          label="Price"
+          value={`₹${d.currentPrice?.toFixed(2) || 0}`}
+          theme={theme}
+        />
+
+        <MiniStat
+          label="Value"
+          value={`₹${Math.round(
+            d.currentValue || 0
+          ).toLocaleString("en-IN")}`}
+          theme={theme}
+        />
+      </div>
+
+      {/* PNL */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingTop: 6,
+          borderTop: `1px solid ${theme.border}`,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 12,
+            color: theme.subText,
+          }}
+        >
+          P&L
+        </span>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: isGain
+                ? "#22c55e"
+                : "#ef4444",
+            }}
+          >
+            ₹{Math.round(
+              d.pnl || 0
+            ).toLocaleString("en-IN")}
+          </span>
+
+          <span
+            style={{
+              fontSize: 12,
+              color: isGain
+                ? "#22c55e"
+                : "#ef4444",
+            }}
+          >
+            {Number(d.pnlPct || 0).toFixed(2)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [profile, setProfile] = useState(() => getActiveProfile());
   const [profileInput, setProfileInput] = useState("");
@@ -355,6 +573,7 @@ function App() {
   const inputRef = useRef(null);
   const [niftyPct, setNiftyPct] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
 
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
@@ -389,7 +608,7 @@ useEffect(() => {
   text: dark ? "#e5e7eb" : "#111827",
   subText: dark ? "#9ca3af" : "#6b7280",
 };
-
+const isMobile = window.innerWidth < 768;
 const handleProfileCreate = (name) => {
   if (!name) return;
 
@@ -1286,10 +1505,26 @@ const updated = data.map((item) => {
   };
 });
 
-    setData(updated);
-    saveLocalPortfolio(updated);
-    refreshProfiles();
-    setLastUpdated(new Date());
+setData(updated);
+
+saveSnapshot(
+  updated.reduce(
+    (s, d) => s + (Number(d.currentValue) || 0),
+    0
+  ),
+  updated.reduce(
+    (s, d) =>
+      s +
+      ((Number(d.quantity) || 0) *
+        (Number(d.avgPrice) || 0)),
+    0
+  ),
+  updated
+);
+
+saveLocalPortfolio(updated);
+refreshProfiles();
+setLastUpdated(new Date());
 
     const nifty = await fetchNiftyChange();
     setNiftyPct(nifty);
@@ -1659,6 +1894,12 @@ const handleFileUpload = (e) => {
     : (B || 0) - (A || 0);
 });
 
+const filteredData = sortedData.filter((d) =>
+  (d.symbol || "")
+    .toLowerCase()
+    .includes(search.toLowerCase())
+);
+
   const assetData = [
     { name: "Stocks", value: allocation.stocks },
     { name: "MF", value: allocation.mf },
@@ -1873,6 +2114,26 @@ if (!profile) {
     <span>Analytics</span>
   </div>
 
+  <div
+  onClick={() => {
+    setView("history");
+    setSidebarOpen(false);
+  }}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: view === "history" ? "#2563eb" : "transparent",
+    color: view === "history" ? "#fff" : theme.text,
+  }}
+>
+  <TrendingUp size={18} strokeWidth={1.5} />
+  <span>History</span>
+</div>
+
   {/* INSIGHTS */}
   <div
     onClick={() => {
@@ -2055,17 +2316,20 @@ if (!profile) {
 
 
   {/* LEFT */}
-  <div>
-<h2 style={{ fontSize: 20, lineHeight: 1.2, margin: 0 }}>
-  {getGreeting()},<br />
-  {profile} 👋
-</h2>
-
-<p style={{ opacity: 0.7, fontSize: 13, marginTop: 4 }}>
-  {todayText}
-</p>
-  </div>
-   </div>
+  {/* Header text - single line, coloured today text */}
+  <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ fontSize: 16, lineHeight: 1.2, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 600 }}>
+                {getGreeting()}, {profile} 👋
+              </h2>
+              <p style={{
+                color: totalToday >= 0 ? "#22c55e" : "#ef4444",
+                fontSize: 12, marginTop: 3,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontWeight: 500
+              }}>
+                {todayText}
+              </p>
+            </div>
+          </div>
 
   {showProfileModal && (
   <div
@@ -2577,6 +2841,7 @@ refreshProfiles();
     width: "100%",       // ✅ CRITICAL
   }}
 >
+
   <table
     className="table"
     style={{
@@ -3554,6 +3819,7 @@ const inv = (json.invalid || []).find(
 </div>
 
             {/* TABLE */}
+            {!isMobile ? (
             <div style={{ overflowX: "auto", maxHeight: "65vh" }}>
   <table
     className="table"
@@ -4059,10 +4325,52 @@ const clampedPosition = Math.max(0, Math.min(100, position));
 </tbody> 
             </table>
           </div>  
+          ) : (
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {filteredData.map((d, idx) => (
+                <HoldingCard
+                  key={idx}
+                  d={d}
+                  theme={theme}
+                  dark={dark}
+                  onEdit={() => {
+                    setEditingId(d.symbol);
+            
+                    setEditForm({
+                      symbol: d.symbol,
+                      quantity: d.quantity,
+                      avgPrice: d.avgPrice,
+                    });
+                  }}
+                  onDelete={() => {
+                    if (
+                      window.confirm(
+                        `Delete ${d.symbol}?`
+                      )
+                    ) {
+                      const updated = cleanData.filter(
+                        (x) => x.symbol !== d.symbol
+                      );
+            
+                      setData(updated);
+                      saveLocalPortfolio(updated);
+                    }
+                  }}
+                />
+              ))}
+            </div>
+            
+            )}
           </>
         )}
 
-        {/* ANALYTICS */}
 {/* ANALYTICS */}
 {view === "analytics" && (
   <div
@@ -4246,6 +4554,10 @@ const clampedPosition = Math.max(0, Math.min(100, position));
     </div>
 
   </div>
+)}
+
+{view === "history" && (
+  <History data={cleanData} theme={theme} dark={dark} />
 )}
 
 {/* INSIGHTS */}
