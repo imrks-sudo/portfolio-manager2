@@ -680,6 +680,7 @@ function App() {
   const [sortDir, setSortDir] = useState("desc");
   const [showAlerts, setShowAlerts] = useState(false);
   const alertRef = useRef(null);
+  const profileRef = useRef(null);
   const [events, setEvents] = useState({
   active: [],
   archive: []
@@ -812,6 +813,29 @@ useEffect(() => {
 
   return () => {
     document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
+
+useEffect(() => {
+  const handleClickOutside = (event) => {
+    if (
+      profileRef.current &&
+      !profileRef.current.contains(event.target)
+    ) {
+      setShowProfileMenu(false);
+    }
+  };
+
+  document.addEventListener(
+    "mousedown",
+    handleClickOutside
+  );
+
+  return () => {
+    document.removeEventListener(
+      "mousedown",
+      handleClickOutside
+    );
   };
 }, []);
 
@@ -1635,6 +1659,7 @@ const updated = data.map((item) => {
 setData(updated);
 
 saveSnapshot(
+  profile,
   updated.reduce(
     (s, d) => s + (Number(d.currentValue) || 0),
     0
@@ -2795,25 +2820,30 @@ refreshProfiles();
 )} 
 </div>
 
-    {/* 👤 PROFILE */}
-    <div style={{ position: "relative" }}>
-      <div
-        onClick={() => setShowProfileMenu(prev => !prev)}
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: "50%",
-          background: "#3b82f6",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          fontWeight: 600
-        }}
-      >
-        {profile?.charAt(0)?.toUpperCase()}
-      </div>
+{/* 👤 PROFILE */}
+<div
+  ref={profileRef}
+  style={{ position: "relative" }}
+>
+  <div
+    onClick={() =>
+      setShowProfileMenu((prev) => !prev)
+    }
+    style={{
+      width: 34,
+      height: 34,
+      borderRadius: "50%",
+      background: "#3b82f6",
+      color: "#fff",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      fontWeight: 600
+    }}
+  >
+    {profile?.charAt(0)?.toUpperCase()}
+  </div>
 
       {showProfileMenu && (
         <div
@@ -4708,7 +4738,14 @@ const clampedPosition = Math.max(0, Math.min(100, position));
 )}
 
 {view === "history" && (
-  <History data={cleanData} theme={theme} dark={dark} />
+  <History
+  data={cleanData}
+  profile={profile}
+  totalValue={totalValue}
+  totalInvestment={totalInvestment}
+  dark={dark}
+  theme={theme}
+/>
 )}
 
 {/* INSIGHTS */}

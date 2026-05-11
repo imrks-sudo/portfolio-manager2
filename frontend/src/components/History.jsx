@@ -5,23 +5,32 @@
 import React, { useEffect, useState, useRef } from "react";
 
 // ─── Constants ───────────────────────────────────────────────────
-const HISTORY_KEY = "portfolio_history_v1";
+const getHistoryKey = (profile) =>
+  `portfolio_history_${profile || "default"}`;
 const MAX_SNAPSHOTS = 180; // 6 months daily
 
 // ─── Snapshot helpers ─────────────────────────────────────────────
-export const loadHistory = () => {
+export const loadHistory = (profile) => {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(
+      getHistoryKey(profile)
+    );
+
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 };
 
-export const saveSnapshot = (totalValue, totalInvestment, holdings) => {
+export const saveSnapshot = (
+  profile,
+  totalValue,
+  totalInvestment,
+  holdings
+) => {
   if (!totalValue && !totalInvestment) return;
 
-  const history = loadHistory();
+  const history = loadHistory(profile);
   const todayKey = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
   // Only one snapshot per day — update if same day
@@ -52,7 +61,8 @@ export const saveSnapshot = (totalValue, totalInvestment, holdings) => {
     .slice(-MAX_SNAPSHOTS);
 
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+    localStorage.setItem(
+  getHistoryKey(profile), JSON.stringify(trimmed));
   } catch {
     // localStorage full — trim more aggressively
     localStorage.setItem(
@@ -84,7 +94,12 @@ const RANGES = [
 ];
 
 // ─── Main Component ───────────────────────────────────────────────
-export default function History({ data = [], theme, dark }) {
+export default function History({
+  data = [],
+  profile,
+  theme,
+  dark
+}) {
   const [history, setHistory] = useState([]);
   const [range, setRange] = useState("1M");
   const [activeTab, setActiveTab] = useState("value"); // "value" | "pnl" | "pnlPct"
@@ -94,8 +109,8 @@ export default function History({ data = [], theme, dark }) {
 
   // Load history on mount
   useEffect(() => {
-    setHistory(loadHistory());
-  }, [data]);
+    setHistory(loadHistory(profile));
+  }, [data, profile]);
 
   // Filtered data by range
   const filteredHistory = (() => {

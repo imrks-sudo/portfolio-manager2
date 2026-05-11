@@ -3,6 +3,10 @@ const API_KEY = process.env.API_KEY;
 const fs = require("fs");
 const path = require("path");
 const CACHE_FILE = path.join(__dirname, "mf-cache.json");
+
+// ✅ FIX: Persist events to disk (survives server restarts + Render sleep)
+const EVENTS_CACHE_FILE = path.join(__dirname, "events-cache.json");
+
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -10,8 +14,54 @@ const cron = require("node-cron");
 const rateLimit = require("express-rate-limit");
 
 // 🧠 In-memory events store
-let EVENTS = [];
+// ✅ FIX: Initialize as proper object (was `[]` which broke EVENTS.active/.archive reads)
+let EVENTS = { active: [], archive: [] };
 let MF_LIST = [];
+
+// ✅ FIX: Load events from disk on startup so they survive restarts
+const loadEventsCache = () => {
+  try {
+    if (fs.existsSync(EVENTS_CACHE_FILE)) {
+      const raw = fs.readFileSync(EVENTS_CACHE_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      // Validate shape before using
+      if (parsed && Array.isArray(parsed.active) && Array.isArray(parsed.archive)) {
+        EVENTS = parsed;
+        if (parsed.lastFetchTime) {
+  lastFetchTime = parsed.lastFetchTime;
+}
+        console.log(
+          `⚡ Loaded events cache: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
+        );
+      }
+    }
+  } catch (err) {
+    console.error("⚠️ Failed to load events cache:", err.message);
+    EVENTS = { active: [], archive: [] };
+  }
+};
+
+// ✅ FIX: Write events to disk after every update
+const saveEventsCache = () => {
+  try {
+    fs.writeFileSync(
+      EVENTS_CACHE_FILE,
+      JSON.stringify(
+        {
+          ...EVENTS,
+          lastFetchTime,
+        },
+        null,
+        2
+      )
+    );
+  } catch (err) {
+    console.error(
+      "⚠️ Failed to save events cache:",
+      err.message
+    );
+  }
+};
 
 const normalizeSymbol = (symbol) =>
   (symbol || "")
@@ -86,23 +136,24 @@ const fetchAMFI = async () => {
 
     console.log("✅ Parsed MF count:", list.length);
 
-    // 🔥 FALLBACK TO CACHE (CRITICAL)
-    // 🔥 ONLY update if FULL dataset
-if (list.length > MF_LIST.length && list.length > 5000) {
+  if (list.length > MF_LIST.length && list.length > 5000) {
   console.log("✅ AMFI refreshed:", list.length);
+
+  MF_LIST = list;
+
+  fs.writeFileSync(
+    CACHE_FILE,
+    JSON.stringify(list, null, 2)
+  );
+
+  console.log(`✅ AMFI loaded: ${MF_LIST.length}`);
 } else {
   console.log("⚠️ Skipping update (partial data)");
 }
 
-    MF_LIST = list;
-
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(list, null, 2));
-
-    console.log(`✅ AMFI loaded: ${MF_LIST.length}`);
   } catch (err) {
     console.error("❌ AMFI fetch failed:", err.message);
 
-    // 🔥 FINAL FALLBACK
     if (fs.existsSync(CACHE_FILE)) {
       console.log("⚠️ Loading MF from cache");
 
@@ -113,7 +164,7 @@ if (list.length > MF_LIST.length && list.length > 5000) {
 };
 
 const app = express();
-app.set("trust proxy", 1); // if behind a proxy (e.g. Vercel)
+app.set("trust proxy", 1);
 
 // 🔐 Allowed origins (PRODUCTION + DEV)
 const allowed = [
@@ -125,7 +176,6 @@ const allowed = [
 // ✅ CORS CONFIG
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
 
     if (allowed.includes(origin)) {
@@ -142,7 +192,7 @@ app.use(cors({
 
 // 🚦 RATE LIMITING
 const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -153,28 +203,9 @@ app.use(limiter);
 // 📦 BODY PARSER
 app.use(express.json());
 
-/*
-// 🔐 API KEY PROTECTION
-app.use((req, res, next) => {
-  const key = req.headers["x-api-key"];
-
-  if (!API_KEY) {
-    console.warn("⚠️ API_KEY not set in environment");
-    return next(); // fallback (optional)
-  }
-
-  if (!key || key !== API_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  next();
-});
-*/
-
 const { wrapper } = require("axios-cookiejar-support");
 const tough = require("tough-cookie");
 
-// ✅ Create cookie jar
 const jar = new tough.CookieJar();
 
 // 🔧 NORMALIZE
@@ -184,82 +215,75 @@ const matchMF = (input) => {
     return { type: "invalid" };
   }
 
-const normalize = (str) =>
-  (str || "")
-    .toLowerCase()
-    .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
+  const normalize = (str) =>
+    (str || "")
+      .toLowerCase()
+      .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
 
-const cleanInput = normalize(input);
+  const cleanInput = normalize(input);
 
-// 🔥 smarter matching (bi-directional + partial)
-const inputWords = cleanInput.split(" ").filter(w => w.length > 2);
+  const inputWords = cleanInput.split(" ").filter(w => w.length > 2);
 
-const matches = MF_LIST
-  .filter((mf) => {
-    const normName = normalize(mf.name);
+  const matches = MF_LIST
+    .filter((mf) => {
+      const normName = normalize(mf.name);
 
-    // 🔥 REQUIRE at least 2 meaningful word matches
-    const matchCount = inputWords.filter(w =>
-      normName.includes(w)
-    ).length;
+      const matchCount = inputWords.filter(w =>
+        normName.includes(w)
+      ).length;
 
-    return matchCount >= Math.min(2, inputWords.length);
-  })
-  .map((mf) => {
-    const normName = normalize(mf.name);
-    const nameLower = mf.name.toLowerCase();
+      return matchCount >= Math.min(2, inputWords.length);
+    })
+    .map((mf) => {
+      const normName = normalize(mf.name);
+      const nameLower = mf.name.toLowerCase();
 
-    let score = 0;
+      let score = 0;
 
-    const matchCount = inputWords.filter(w =>
-      normName.includes(w)
-    ).length;
+      const matchCount = inputWords.filter(w =>
+        normName.includes(w)
+      ).length;
 
-    score += matchCount * 5;
+      score += matchCount * 5;
 
-    if (normName.includes(cleanInput)) score += 10;
-    if (normName.startsWith(cleanInput)) score += 5;
+      if (normName.includes(cleanInput)) score += 10;
+      if (normName.startsWith(cleanInput)) score += 5;
 
-    if (nameLower.includes("direct")) score += 2;
-    if (nameLower.includes("growth")) score += 1;
-    if (nameLower.includes("regular")) score -= 1;
+      if (nameLower.includes("direct")) score += 2;
+      if (nameLower.includes("growth")) score += 1;
+      if (nameLower.includes("regular")) score -= 1;
 
-    return { ...mf, score };
-  })
-  .sort((a, b) => b.score - a.score);
+      return { ...mf, score };
+    })
+    .sort((a, b) => b.score - a.score);
 
-  const finalMatches = matches.slice(0, 5);
+  const seen = new Set();
+  const uniqueMatches = [];
 
-// 🔥 remove duplicates (same scheme family)
-const seen = new Set();
-const uniqueMatches = [];
+  for (const m of matches) {
+    const key = normalize(m.name)
+      .replace(/direct|growth|regular|idcw/g, "");
 
-for (const m of matches) {
-  const key = normalize(m.name)
-    .replace(/direct|growth|regular|idcw/g, "");
-
-  if (!seen.has(key)) {
-    seen.add(key);
-    uniqueMatches.push(m);
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueMatches.push(m);
+    }
   }
-}
 
-// 🔥 FINAL DECISION
+  if (uniqueMatches.length === 1) {
+    return { type: "valid", match: uniqueMatches[0] };
+  }
 
-if (uniqueMatches.length === 1) {
-  return { type: "valid", match: uniqueMatches[0] };
-}
+  if (uniqueMatches.length > 1) {
+    return {
+      type: "suggest",
+      matches: uniqueMatches.slice(0, 5),
+    };
+  }
 
-if (uniqueMatches.length > 1) {
-  return {
-    type: "suggest",
-    matches: uniqueMatches.slice(0, 5),
-  };
-}
-
-return { type: "invalid" };
+  return { type: "invalid" };
 };
 
 const fetchMFAPI = async () => {
@@ -274,19 +298,17 @@ const fetchMFAPI = async () => {
       throw new Error("Invalid MFAPI response");
     }
 
-      const list = res.data.map((mf) => ({
+    const list = res.data.map((mf) => ({
       code: mf.schemeCode,
       name: mf.schemeName,
       nav: null,
     }));
 
-    // 🚨 SAFETY CHECK (prevent bad overwrite)
     if (list.length < 5000) {
       console.log("⚠️ Skipping MFAPI update (too small dataset)");
       return;
     }
 
-    // 🔥 UPDATE ONLY IF BETTER THAN CURRENT
     if (list.length > MF_LIST.length) {
       MF_LIST = list;
 
@@ -316,7 +338,6 @@ app.post("/update-prices", async (req, res) => {
     const results = [];
     let successCount = 0;
 
-    // ✅ NSE instance (same as working GET)
     const nse = axios.create({
       baseURL: "https://www.nseindia.com",
       headers: {
@@ -327,7 +348,6 @@ app.post("/update-prices", async (req, res) => {
       timeout: 5000,
     });
 
-    // ✅ Init cookies (CRITICAL)
     try {
       await nse.get("/");
     } catch {
@@ -341,60 +361,49 @@ app.post("/update-prices", async (req, res) => {
 
         const s = symbol.toLowerCase();
 
-        console.log(
-  `%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-  "color: #374151"
-);
-
-        // =========================
-        // 🟣 MUTUAL FUND (SAME AS YOUR WORKING CODE)
-        // =========================
         let change = 0;
         let pChange = 0;
         let high52 = 0;
         let low52 = 0;
-        let pe = 0;           
+        let pe = 0;
         let marketCap = 0;
+
         if (s.includes("fund") || s.includes("plan")) {
 
           const search = await axios.get(
-  "https://api.mfapi.in/mf/search?q=" +
-    encodeURIComponent(symbol)
-);
+            "https://api.mfapi.in/mf/search?q=" +
+              encodeURIComponent(symbol)
+          );
 
-if (!search.data?.length) {
-  console.log(`❌ MF not found: ${symbol}`);
-  continue;
-}
+          if (!search.data?.length) {
+            console.log(`❌ MF not found: ${symbol}`);
+            continue;
+          }
 
-// 🔥 NORMALIZE FUNCTION
-const normalize = (str) =>
-  (str || "")
-    .toLowerCase()
-    .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
-    .replace(/[^a-z0-9 ]/g, "") // 👈 KEEP SPACE
-    .trim();
+          const normalize = (str) =>
+            (str || "")
+              .toLowerCase()
+              .replace(/fund|plan|growth|direct|regular|idcw/gi, "")
+              .replace(/[^a-z0-9 ]/g, "")
+              .trim();
 
-// 🔥 FIND BEST MATCH
-const target = normalize(symbol);
+          const target = normalize(symbol);
 
-let bestMatch = search.data.find((s) =>
-  normalize(s.schemeName).includes(target)
-);
+          let bestMatch = search.data.find((s) =>
+            normalize(s.schemeName).includes(target)
+          );
 
-// fallback → partial match
-if (!bestMatch) {
-  bestMatch = search.data.find((s) =>
-    target.includes(normalize(s.schemeName))
-  );
-}
+          if (!bestMatch) {
+            bestMatch = search.data.find((s) =>
+              target.includes(normalize(s.schemeName))
+            );
+          }
 
-// fallback → first
-if (!bestMatch) {
-  bestMatch = search.data[0];
-}
+          if (!bestMatch) {
+            bestMatch = search.data[0];
+          }
 
-const schemeCode = bestMatch.schemeCode;
+          const schemeCode = bestMatch.schemeCode;
 
           const navRes = await axios.get(
             `https://api.mfapi.in/mf/${schemeCode}`
@@ -404,106 +413,75 @@ const schemeCode = bestMatch.schemeCode;
 
           price = Number(nav) || 0;
 
-          console.log(
-  `%c${symbol} → ₹${price}`,
-  "color: #a855f7; font-weight: bold;"
-);
-
           if (!price) {
-            console.log(
-              `%c⚠️ No NAV for: ${symbol}`,
-              "color: #f59e0b; font-weight: bold;"
-            );
+            console.log(`⚠️ No NAV for: ${symbol}`);
             continue;
           }
-        }
-
-        // =========================
-        // 🟢 STOCK / ETF / SGB
-        // =========================
-        else {
+        } else {
           if (symbol.endsWith("-E")) symbol = symbol.replace("-E", "");
           if (symbol.endsWith("-GB")) symbol = symbol.replace("-GB", "");
 
           let response;
 
-try {
-  response = await nse.get(
-    `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
-  );
-} catch (err) {
-  console.log("⚠️ NSE retry for", symbol);
+          try {
+            response = await nse.get(
+              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+            );
+          } catch (err) {
+            console.log("⚠️ NSE retry for", symbol);
 
-  // retry cookie + request
-  await nse.get("/");
-  response = await nse.get(
-    `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
-  );
-}
+            await nse.get("/");
+            response = await nse.get(
+              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+            );
+          }
 
-price = Number(response.data?.priceInfo?.lastPrice) || 0;
+          price = Number(response.data?.priceInfo?.lastPrice) || 0;
 
-const whl = response.data?.priceInfo?.weekHighLow || {};
+          const whl = response.data?.priceInfo?.weekHighLow || {};
 
-high52 = Number(whl.max) || 0;
-low52 = Number(whl.min) || 0;
+          high52 = Number(whl.max) || 0;
+          low52 = Number(whl.min) || 0;
 
-change =
-  Number(response.data?.priceInfo?.change) || 0;
+          change = Number(response.data?.priceInfo?.change) || 0;
+          pChange = Number(response.data?.priceInfo?.pChange) || 0;
+          pe = Number(response.data?.metadata?.pe) || 0;
 
-pChange =
-  Number(response.data?.priceInfo?.pChange) || 0;
-
-// 🔥 ADD THIS
-pe = Number(response.data?.metadata?.pe) || 0;
-
-shares =
-  Number(response.data?.securityInfo?.issuedCap) || 0;
-
-marketCap = shares * price;
-
-          console.log(
-  `%c${symbol} → ₹${price}`,
-  "color: #22c55e; font-weight: bold;"
-);
+          const shares = Number(response.data?.securityInfo?.issuedCap) || 0;
+          marketCap = shares * price;
 
           if (!price) {
-            console.log(
-              `%c⚠️ No price for: ${symbol}`,
-              "color: #f59e0b; font-weight: bold;"
-            );
+            console.log(`⚠️ No price for: ${symbol}`);
             continue;
           }
         }
 
-        // ✅ PUSH RESULT (instead of DB update)
         try {
           results.push({
-  symbol: symbolRaw,
-  currentPrice: price,
-  change: change || 0,
-  pChange: pChange || 0,
-  high52,
-  low52,
-  pe,
-  marketCap
-});
-successCount++;
-} catch (err) {
-  console.log("Push failed:", err.message);
-}
+            symbol: symbolRaw,
+            currentPrice: price,
+            change: change || 0,
+            pChange: pChange || 0,
+            high52,
+            low52,
+            pe,
+            marketCap
+          });
+
+        console.log(
+  `✅ ${symbolRaw}: ₹${price}`
+);
+          
+        } catch (err) {
+          console.log("Push failed:", err.message);
+        }
 
         successCount++;
 
-        // ✅ Delay (same as your working code)
         await new Promise((r) => setTimeout(r, 300));
 
       } catch (err) {
-        console.log(
-          `%c❌ Failed: ${symbolRaw}`,
-          "color: #ef4444; font-weight: bold;",
-          err.message
-        );
+        console.log(`❌ Failed: ${symbolRaw}`, err.message);
       }
     }
 
@@ -524,13 +502,12 @@ successCount++;
 // =========================
 
 let cachedNifty = null;
-let lastFetch = 0;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let lastNiftyFetch = 0;
+const CACHE_DURATION = 5 * 60 * 1000;
 
 app.get("/api/nifty", async (req, res) => {
   try {
-    // 🔥 Serve from cache
-    if (cachedNifty && Date.now() - lastFetch < CACHE_DURATION) {
+    if (cachedNifty && Date.now() - lastNiftyFetch < CACHE_DURATION) {
       return res.json(cachedNifty);
     }
 
@@ -547,25 +524,22 @@ app.get("/api/nifty", async (req, res) => {
 
     const data = response.data;
 
-    // 🔥 Optional: minimal clean response (faster FE)
     const result =
       data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
 
     const niftyData = {
-      raw: data,        // full data if needed
-      close: result,    // simplified
+      raw: data,
+      close: result,
     };
 
-    // 🔥 cache
     cachedNifty = niftyData;
-    lastFetch = Date.now();
+    lastNiftyFetch = Date.now();
 
     res.json(niftyData);
 
   } catch (err) {
     console.error("❌ NIFTY fetch failed:", err.message);
 
-    // 🔥 fallback to stale cache (important UX)
     if (cachedNifty) {
       return res.json(cachedNifty);
     }
@@ -589,7 +563,6 @@ const fetchCorporateActions = async () => {
       timeout: 5000,
     });
 
-    // ✅ IMPORTANT: init cookies
     try {
       await nse.get("/");
     } catch {
@@ -601,149 +574,138 @@ const fetchCorporateActions = async () => {
     );
 
     const data = res.data || [];
-    const now = new Date();
 
-// 🔥 helper: clean title
-const getCleanTitle = (type) => {
-  switch (type) {
-    case "DIVIDEND":
-      return "Dividend declared";
-    case "RESULT":
-      return "Results announced";
-    case "MEETING":
-      return "Board meeting update";
-    case "RECORD":
-      return "Record date announced";
-    case "MERGER":
-      return "Merger update";
-    case "DEMERGER":
-      return "Demerger update";
-    case "ACQUISITION":
-      return "Acquisition update";
-    default:
-      return "Corporate update";
-  }
-};
+    const getCleanTitle = (type) => {
+      switch (type) {
+        case "DIVIDEND":   return "Dividend declared";
+        case "RESULT":     return "Results announced";
+        case "MEETING":    return "Board meeting update";
+        case "RECORD":     return "Record date announced";
+        case "MERGER":     return "Merger update";
+        case "DEMERGER":   return "Demerger update";
+        case "ACQUISITION":return "Acquisition update";
+        default:           return "Corporate update";
+      }
+    };
 
-// 🔥 helper: extract record date
-const extractRecordDate = (text) => {
-  const match = text.match(/(\d{1,2}-[A-Za-z]{3}-\d{4})/);
-  return match ? match[1] : null;
-};
+    const extractRecordDate = (text) => {
+      const match = text.match(/(\d{1,2}-[A-Za-z]{3}-\d{4})/);
+      return match ? match[1] : null;
+    };
 
-// 🔥 STEP 1: Normalize + classify
-const parsed = data.map((item) => {
-  const rawTitle =
-    item.attchmntText ||
-    item.desc ||
-    "";
+    // STEP 1: Normalize + classify fresh NSE data
+    const parsed = data.map((item) => {
+      const rawTitle = item.attchmntText || item.desc || "";
+      const symbol = item.symbol || "";
+      const t = rawTitle.toLowerCase();
 
-  const symbol = item.symbol || "";
-  const t = rawTitle.toLowerCase();
+      let type = "OTHER";
 
-  let type = "OTHER";
+      if (t.includes("dividend")) type = "DIVIDEND";
+      else if (t.includes("result")) type = "RESULT";
+      else if (t.includes("board meeting")) type = "MEETING";
+      else if (t.includes("record date")) type = "RECORD";
+      else if (t.includes("merger")) type = "MERGER";
+      else if (t.includes("demerger")) type = "DEMERGER";
+      else if (
+        t.includes("acquisition") &&
+        (
+          t.includes("acquired") ||
+          t.includes("acquisition of") ||
+          t.includes("completion of acquisition")
+        )
+      ) {
+        type = "ACQUISITION";
+      }
 
-  if (t.includes("dividend")) type = "DIVIDEND";
-  else if (t.includes("result")) type = "RESULT";
-  else if (t.includes("board meeting")) type = "MEETING";
-  else if (t.includes("record date")) type = "RECORD";
-  else if (t.includes("merger")) type = "MERGER";
-  else if (t.includes("demerger")) type = "DEMERGER";
-  else if (
-    t.includes("acquisition") &&
-    (
-      t.includes("acquired") ||
-      t.includes("acquisition of") ||
-      t.includes("completion of acquisition")
-    )
-  ) {
-    type = "ACQUISITION";
-  }
+      const date = item.sort_date
+        ? item.sort_date.split(" ")[0]
+        : null;
 
-  const date = item.sort_date
-    ? item.sort_date.split(" ")[0]
-    : null;
+      const recordDate = extractRecordDate(rawTitle);
 
-  const recordDate = extractRecordDate(rawTitle);
+      return { symbol, type, title: getCleanTitle(type), rawTitle, recordDate, date };
+    });
 
-  return {
-    symbol,
-    type,
-    title: getCleanTitle(type), // 🔥 cleaned
-    rawTitle, // keep original if needed later
-    recordDate, // 🔥 extracted
-    date,
-  };
-});
+    // STEP 2: Keep only meaningful
+    const meaningful = parsed.filter((e) => e.type !== "OTHER");
 
-// 🔥 STEP 2: keep only meaningful
-const meaningful = parsed.filter((e) => e.type !== "OTHER");
+    // STEP 3: Deduplicate fresh batch (symbol + type + date)
+    const freshMap = new Map();
+    meaningful.forEach((e) => {
+      const key = `${e.symbol}_${e.type}_${e.date}`;
+      freshMap.set(key, e);
+    });
 
-// 🔥 STEP 3: deduplicate (symbol + type + date)
-const map = new Map();
+    // ✅ FIX STEP 4: Merge with PERSISTED events (not just in-memory)
+    // Load from disk to get events that survived across restarts
+    // EVENTS is already loaded from disk at startup, so we merge with it directly
+    const existingMap = new Map();
 
-meaningful.forEach((e) => {
-  const key = `${e.symbol}_${e.type}_${e.date}`;
-  map.set(key, e);
-});
+    // Seed existing map from current in-memory EVENTS (already disk-backed)
+    [...(EVENTS.active || []), ...(EVENTS.archive || [])].forEach((e) => {
+      const key = `${e.symbol}_${e.type}_${e.date}`;
+      existingMap.set(key, e);
+    });
 
-const unique = Array.from(map.values());
+    // Add/overwrite with fresh NSE data (fresh wins)
+    freshMap.forEach((e, key) => {
+      existingMap.set(key, e);
+    });
 
-// 🔥 STEP 4: merge with previous events (prevents flicker)
-const existingMap = new Map();
+    const merged = Array.from(existingMap.values());
 
-[...(EVENTS.active || []), ...(EVENTS.archive || [])].forEach((e) => {
-  const key = `${e.symbol}_${e.type}_${e.date}`;
-  existingMap.set(key, e);
-});
+    // STEP 5: Classify into active / archive based on date
+    const active = [];
+    const archive = [];
 
-// add new events
-unique.forEach((e) => {
-  const key = `${e.symbol}_${e.type}_${e.date}`;
-  existingMap.set(key, e);
-});
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-const merged = Array.from(existingMap.values());
+    merged.forEach((e) => {
+      if (!e.date) return;
 
-// 🔥 STEP 5: classify with better lifecycle
-const active = [];
-const archive = [];
+      const eventDate = new Date(e.date);
+      eventDate.setHours(0, 0, 0, 0);
 
-// normalize today (remove time)
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+      const diff = (eventDate - today) / (1000 * 60 * 60 * 24);
 
-merged.forEach((e) => {
-  if (!e.date) return;
+      // Active: past 3 days to next 7 days
+      if (diff >= -3 && diff <= 7) {
+        active.push(e);
+      }
+      // Archive: older than 3 days, within 30 days
+      else if (diff < -3 && diff >= -30) {
+        archive.push(e);
+      }
+      // Older than 30 days: drop (expired)
+    });
 
-  const eventDate = new Date(e.date);
-  eventDate.setHours(0, 0, 0, 0);
-
-  const diff =
-    (eventDate - today) / (1000 * 60 * 60 * 24);
-
-  // 🟢 UPCOMING + TODAY + RECENT (keep visible)
-  if (diff >= -3 && diff <= 7) {
-    active.push(e);
-  }
-
-  // 🟡 OLDER EVENTS (move to archive)
-  else if (diff < -3 && diff >= -30) {
-    archive.push(e);
-  }
-});
-
-// 🔥 STEP 6: store (limit size)
-EVENTS = {
-  active: active.slice(0, 20),
-  archive: archive.slice(0, 50),
-};
-
-console.log(
-  `✅ Events updated: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
+    active.sort(
+  (a, b) => new Date(b.date) - new Date(a.date)
 );
+
+archive.sort(
+  (a, b) => new Date(b.date) - new Date(a.date)
+);
+
+    // STEP 6: Store (limit size) and persist to disk
+    EVENTS = {
+      active: active.slice(0, 20),
+      archive: archive.slice(0, 50),
+    };
+
+    // ✅ FIX: Write to disk so events survive restarts
+    saveEventsCache();
+
+    console.log(
+      `✅ Events updated: active=${EVENTS.active.length}, archive=${EVENTS.archive.length}`
+    );
+
   } catch (err) {
     console.error("❌ Events fetch failed:", err.message);
+    // ✅ FIX: On failure, keep existing EVENTS intact (don't wipe them)
+    // Nothing to do here — EVENTS is unchanged, disk cache is still valid
   }
 };
 
@@ -753,16 +715,22 @@ cron.schedule("0 9 * * *", fetchCorporateActions);
 // ⏰ Run at 6 PM
 cron.schedule("0 18 * * *", fetchCorporateActions);
 
-// 🚀 Run once on server start
-fetchCorporateActions();
-
+// ✅ FIX: Track lastFetchTime persistently via events cache timestamp
+// We use a simple approach: store it in the events cache file
 let lastFetchTime = 0;
 
 app.get("/api/events", async (req, res) => {
   try {
-    if (Date.now() - lastFetchTime > 6 * 60 * 60 * 1000) {
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    // ✅ FIX: Only re-fetch if genuinely stale (6h), not on every restart
+    // lastFetchTime persists in memory for the lifetime of this process.
+    // On restart it's 0, but EVENTS is now loaded from disk, so a re-fetch
+    // just enriches with fresh NSE data rather than losing everything.
+    if (now - lastFetchTime > SIX_HOURS) {
       await fetchCorporateActions();
-      lastFetchTime = Date.now();
+      lastFetchTime = now;
     }
 
     res.json({
@@ -793,26 +761,24 @@ app.post("/api/validate-upload", async (req, res) => {
       timeout: 5000,
     });
 
-if (!MF_LIST.length) {
-  console.error("⚠️ MF_LIST empty");
+    if (!MF_LIST.length) {
+      console.error("⚠️ MF_LIST empty");
 
-  return res.json({
-    success: true,
-    valid: [],
-    suggestions: [],
-    invalid: rows.map((r) => ({
-      input: r.symbol,
-      type: "MF",
-    })),
-  });
-}
+      return res.json({
+        success: true,
+        valid: [],
+        suggestions: [],
+        invalid: rows.map((r) => ({
+          input: r.symbol,
+          type: "MF",
+        })),
+      });
+    }
 
-    // ✅ Init cookies
     try {
       await nse.get("/");
     } catch {}
 
-    // 🚀 PARALLEL PROCESSING (faster)
     await Promise.all(
       rows.map(async (row) => {
         const original = (row.symbol || "").toUpperCase();
@@ -822,64 +788,53 @@ if (!MF_LIST.length) {
           symbol.toLowerCase().includes("fund") ||
           symbol.toLowerCase().includes("plan");
 
-        // =========================
-        // 🔵 MUTUAL FUND
-        // =========================
         if (isMF) {
-  let result = matchMF(symbol);
+          let result = matchMF(symbol);
 
-  // 🔥 STEP 1: MFAPI fallback if no match from cache
-  if (result.type === "invalid") {
-    try {
-      const search = await axios.get(
-        "https://api.mfapi.in/mf/search?q=" +
-          encodeURIComponent(symbol)
-      );
+          if (result.type === "invalid") {
+            try {
+              const search = await axios.get(
+                "https://api.mfapi.in/mf/search?q=" +
+                  encodeURIComponent(symbol)
+              );
 
-      if (search.data?.length) {
-        result = {
-          type: "suggest",
-          matches: search.data.slice(0, 5).map((m) => ({
-            name: m.schemeName,
-            code: m.schemeCode,
-          })),
-        };
-      }
-    } catch (err) {
-      console.log("⚠️ MFAPI fallback failed:", err.message);
-    }
-  }
+              if (search.data?.length) {
+                result = {
+                  type: "suggest",
+                  matches: search.data.slice(0, 5).map((m) => ({
+                    name: m.schemeName,
+                    code: m.schemeCode,
+                  })),
+                };
+              }
+            } catch (err) {
+              console.log("⚠️ MFAPI fallback failed:", err.message);
+            }
+          }
 
-  // 🔥 STEP 2: FINAL DECISION
-  if (result.type === "valid") {
-    valid.push({
-      input: original,
-      type: "MF",
-      final: result.match.name,
-      code: result.match.code,
-      nav: result.match.nav,
-    });
-  } else if (result.type === "suggest") {
-    suggestions.push({
-      input: original,
-      type: "MF",
-      suggested: result.matches.map((m) => m.name),
-    });
-  } else {
-    invalid.push({
-      input: original,
-      type: "MF",
-    });
-  }
-}
-
-        // =========================
-        // 🟢 STOCK / ETF / SGB
-        // =========================
-        else {
+          if (result.type === "valid") {
+            valid.push({
+              input: original,
+              type: "MF",
+              final: result.match.name,
+              code: result.match.code,
+              nav: result.match.nav,
+            });
+          } else if (result.type === "suggest") {
+            suggestions.push({
+              input: original,
+              type: "MF",
+              suggested: result.matches.map((m) => m.name),
+            });
+          } else {
+            invalid.push({
+              input: original,
+              type: "MF",
+            });
+          }
+        } else {
           let isValid = false;
 
-          // 🔹 Step 1: Equity API
           try {
             const resEq = await nse.get(
               `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
@@ -890,7 +845,6 @@ if (!MF_LIST.length) {
             }
           } catch {}
 
-          // 🔹 Step 2: Fallback (ETF / SGB / others)
           if (!isValid) {
             try {
               const resSearch = await nse.get(
@@ -911,12 +865,11 @@ if (!MF_LIST.length) {
             } catch {}
           }
 
-          // 🔹 Step 3: Final decision
           if (isValid) {
             valid.push({
-              input: original, // ✅ preserve original
+              input: original,
               type: "STOCK",
-              final: symbol,   // normalized
+              final: symbol,
             });
           } else {
             invalid.push({
@@ -941,26 +894,37 @@ if (!MF_LIST.length) {
   }
 });
 
-// 🔥 LOAD MF DATA BEFORE SERVER STARTS
+// 🔥 LOAD MF DATA + EVENTS CACHE BEFORE SERVER STARTS
 const initServer = async () => {
   try {
     console.log("⏳ Starting server...");
 
-    // 🔥 Try loading cache
+    // ✅ FIX: Load persisted events first so archive/active survive restarts
+    loadEventsCache();
+
+    // Load MF cache
     if (fs.existsSync(CACHE_FILE)) {
       const data = fs.readFileSync(CACHE_FILE, "utf-8");
       MF_LIST = JSON.parse(data);
       console.log("⚡ Loaded MF cache:", MF_LIST.length);
     }
 
-    // 🔥 If cache is too small → fetch BEFORE starting
     if (!MF_LIST.length || MF_LIST.length < 10000) {
       console.log("⏳ Cache too small, fetching MFAPI before start...");
       await fetchMFAPI();
     } else {
-      // otherwise refresh in background
       fetchMFAPI();
     }
+
+    // ✅ FIX: Run fetchCorporateActions on startup to refresh events,
+    // but EVENTS is already seeded from disk so merge works correctly
+    if (
+  !EVENTS.active.length &&
+  !EVENTS.archive.length
+) {
+  await fetchCorporateActions();
+  lastFetchTime = Date.now();
+}
 
     // 🚀 Start server
     app.listen(PORT, () => {
@@ -972,7 +936,6 @@ const initServer = async () => {
   }
 };
 
-// 🔥 START INIT
 initServer();
 
 // ⏰ keep cron (after init)
