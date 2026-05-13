@@ -1,6 +1,30 @@
 {
   "active": [
     {
+      "symbol": "TVSMOTOR",
+      "type": "MEETING",
+      "title": "Board meeting update",
+      "rawTitle": "TVS Motor Company Limited has informed the Exchange regarding Outcome of Board Meeting held on May 13, 2026- Appointment of Mr Ravindran Shanmugam as an Independent Director.",
+      "recordDate": null,
+      "date": "2026-05-13"
+    },
+    {
+      "symbol": "TVSMOTOR",
+      "type": "RESULT",
+      "title": "Results announced",
+      "rawTitle": "TVS Motor Company Limited has submitted to the Exchange, the financial results for the period ended March 31, 2026.",
+      "recordDate": null,
+      "date": "2026-05-13"
+    },
+    {
+      "symbol": "CIPLA",
+      "type": "MEETING",
+      "title": "Board meeting update",
+      "rawTitle": "Cipla Limited has informed the Exchange regarding Outcome of Board Meeting held on May 13, 2026.",
+      "recordDate": null,
+      "date": "2026-05-13"
+    },
+    {
       "symbol": "PEARLPOLY",
       "type": "RESULT",
       "title": "Results announced",
@@ -106,5 +130,5 @@
     }
   ],
   "archive": [],
-  "lastFetchTime": 0
+  "lastFetchTime": 1778658610969
 }

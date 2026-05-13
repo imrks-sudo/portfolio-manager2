@@ -26,7 +26,10 @@ const loadEventsCache = () => {
       const parsed = JSON.parse(raw);
       // Validate shape before using
       if (parsed && Array.isArray(parsed.active) && Array.isArray(parsed.archive)) {
-        EVENTS = parsed;
+        EVENTS = {
+  active: parsed.active || [],
+  archive: parsed.archive || [],
+};
         if (parsed.lastFetchTime) {
   lastFetchTime = parsed.lastFetchTime;
 }
@@ -695,6 +698,8 @@ archive.sort(
       archive: archive.slice(0, 50),
     };
 
+    lastFetchTime = Date.now();
+
     // ✅ FIX: Write to disk so events survive restarts
     saveEventsCache();
 
@@ -720,17 +725,35 @@ cron.schedule("0 18 * * *", fetchCorporateActions);
 let lastFetchTime = 0;
 
 app.get("/api/events", async (req, res) => {
+
   try {
     const SIX_HOURS = 6 * 60 * 60 * 1000;
     const now = Date.now();
 
-    // ✅ FIX: Only re-fetch if genuinely stale (6h), not on every restart
-    // lastFetchTime persists in memory for the lifetime of this process.
-    // On restart it's 0, but EVENTS is now loaded from disk, so a re-fetch
-    // just enriches with fresh NSE data rather than losing everything.
-    if (now - lastFetchTime > SIX_HOURS) {
+    // ✅ SELF-HEAL:
+    // Render free tier can wipe filesystem on restart.
+    // If cache is empty, bootstrap immediately.
+    if (
+      !EVENTS.active.length &&
+      !EVENTS.archive.length
+    ) {
+      console.log(
+        "⚠️ Empty events cache detected → bootstrapping"
+      );
+
       await fetchCorporateActions();
-      lastFetchTime = now;
+
+    }
+
+    // ✅ Refresh only if stale
+    else if (now - lastFetchTime > SIX_HOURS) {
+
+      console.log(
+        "🔄 Events stale → refreshing"
+      );
+
+      await fetchCorporateActions();
+
     }
 
     res.json({
@@ -738,8 +761,17 @@ app.get("/api/events", async (req, res) => {
       active: EVENTS.active || [],
       archive: EVENTS.archive || [],
     });
+
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch events" });
+
+    console.error(
+      "❌ /api/events failed:",
+      err.message
+    );
+
+    res.status(500).json({
+      error: "Failed to fetch events"
+    });
   }
 });
 
@@ -918,21 +950,38 @@ const initServer = async () => {
 
     // ✅ FIX: Run fetchCorporateActions on startup to refresh events,
     // but EVENTS is already seeded from disk so merge works correctly
+        // ✅ Bootstrap events if cache empty
     if (
-  !EVENTS.active.length &&
-  !EVENTS.archive.length
-) {
-  await fetchCorporateActions();
-  lastFetchTime = Date.now();
-}
+      !EVENTS.active.length &&
+      !EVENTS.archive.length
+    ) {
+      console.log(
+        "⚠️ Events cache empty → bootstrapping events"
+      );
 
-    // 🚀 Start server
+      try {
+        await fetchCorporateActions();
+
+      } catch (err) {
+        console.error(
+          "❌ Initial events bootstrap failed:",
+          err.message
+        );
+      }
+    }
+
     app.listen(PORT, () => {
-      console.log("Server running on", PORT);
+      console.log(`🚀 Server running on ${PORT}`);
     });
 
   } catch (err) {
-    console.error("❌ Server init failed:", err.message);
+
+    console.error(
+      "❌ Server init failed:",
+      err.message
+    );
+
+    process.exit(1);
   }
 };
 

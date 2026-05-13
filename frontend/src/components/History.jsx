@@ -2,7 +2,12 @@
 // Drop into src/components/History.jsx
 // Usage: import History from "./components/History"; then <History data={cleanData} theme={theme} dark={dark} />
 
-import React, { useEffect, useState, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useMemo
+} from "react";
 
 // ─── Constants ───────────────────────────────────────────────────
 const getHistoryKey = (profile) =>
@@ -66,9 +71,9 @@ export const saveSnapshot = (
   } catch {
     // localStorage full — trim more aggressively
     localStorage.setItem(
-      HISTORY_KEY,
-      JSON.stringify(trimmed.slice(-30))
-    );
+  getHistoryKey(profile),
+  JSON.stringify(trimmed.slice(-30))
+);
   }
 };
 
@@ -113,13 +118,24 @@ export default function History({
   }, [data, profile]);
 
   // Filtered data by range
-  const filteredHistory = (() => {
-    const rangeDays = RANGES.find((r) => r.label === range)?.days ?? 30;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - rangeDays);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    return history.filter((h) => h.date >= cutoffStr);
-  })();
+  const filteredHistory = useMemo(() => {
+  const rangeDays =
+    RANGES.find((r) => r.label === range)?.days ?? 30;
+
+  const cutoff = new Date();
+
+  cutoff.setDate(
+    cutoff.getDate() - rangeDays
+  );
+
+  const cutoffStr = cutoff
+    .toISOString()
+    .slice(0, 10);
+
+  return history.filter(
+    (h) => h.date >= cutoffStr
+  );
+}, [history, range]);
 
   // Stats derived from filtered range
   const stats = (() => {
