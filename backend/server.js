@@ -12,6 +12,7 @@ const cors = require("cors");
 const axios = require("axios");
 const cron = require("node-cron");
 const rateLimit = require("express-rate-limit");
+const createAiChatRouter = require("./routes/aiChat");
 
 // 🧠 In-memory events store
 // ✅ FIX: Initialize as proper object (was `[]` which broke EVENTS.active/.archive reads)
@@ -206,6 +207,12 @@ app.use(limiter);
 // 📦 BODY PARSER
 app.use(express.json());
 
+app.use(
+  createAiChatRouter({
+    getEvents: () => EVENTS,
+  })
+);
+
 const { wrapper } = require("axios-cookiejar-support");
 const tough = require("tough-cookie");
 
@@ -225,9 +232,16 @@ const matchMF = (input) => {
       .replace(/[^a-z0-9]/g, "")
       .trim();
 
-  const cleanInput = normalize(input);
+const cleanInput = normalize(input);
 
-  const inputWords = cleanInput.split(" ").filter(w => w.length > 2);
+const inputWords = (input || "")
+  .toLowerCase()
+  .replace(
+    /fund|plan|growth|direct|regular|idcw/gi,
+    ""
+  )
+  .split(/[^a-z0-9]+/)
+  .filter((w) => w.length > 2);
 
   const matches = MF_LIST
     .filter((mf) => {
@@ -337,6 +351,8 @@ app.post("/update-prices", async (req, res) => {
     if (!symbols || !Array.isArray(symbols)) {
       return res.status(400).json({ error: "Invalid symbols" });
     }
+
+    console.log(`[prices] update requested for ${symbols.length} symbols`);
 
     const results = [];
     let successCount = 0;
@@ -474,6 +490,7 @@ app.post("/update-prices", async (req, res) => {
         console.log(
   `✅ ${symbolRaw}: ₹${price}`
 );
+        console.log(`[prices] ${symbolRaw} = ${price}`);
           
         } catch (err) {
           console.log("Push failed:", err.message);
@@ -493,6 +510,8 @@ app.post("/update-prices", async (req, res) => {
       updated: successCount,
       data: results,
     });
+
+    console.log(`[prices] update completed: ${successCount}/${symbols.length}`);
 
   } catch (err) {
     console.error("Update error:", err);
@@ -777,7 +796,8 @@ app.get("/api/events", async (req, res) => {
 
 app.post("/api/validate-upload", async (req, res) => {
   try {
-    const rows = req.body.rows || [];
+    const rows = (req.body.rows || [])
+  .slice(0, 50);
 
     const valid = [];
     const suggestions = [];

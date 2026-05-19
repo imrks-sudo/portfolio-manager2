@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 
 import posthog from 'posthog-js';
 import History, { saveSnapshot } from "./components/History";
+import AIChat from "./components/AIChat";
 
 import {
   LayoutDashboard,
@@ -735,7 +736,31 @@ useEffect(() => {
   text: dark ? "#e5e7eb" : "#111827",
   subText: dark ? "#9ca3af" : "#6b7280",
 };
-const isMobile = window.innerWidth < 768;
+
+const [isMobile, setIsMobile] =
+  useState(window.innerWidth < 768);
+
+useEffect(() => {
+
+  const handler = () => {
+    setIsMobile(
+      window.innerWidth < 768
+    );
+  };
+
+  window.addEventListener(
+    "resize",
+    handler
+  );
+
+  return () =>
+    window.removeEventListener(
+      "resize",
+      handler
+    );
+
+}, []);
+
 const handleProfileCreate = (name) => {
   if (!name) return;
 
@@ -886,15 +911,26 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  posthog.init('phc_uWKkVjeiNkgXHPDMSugLefet86cAmhQcxkgPdUvi2gdm', {
-    api_host: 'https://app.posthog.com',
-  });
 
-  const active = getActiveProfile() || "guest";
+  // ✅ Initialize PostHog only once
+  posthog.init(
+    import.meta.env.VITE_POSTHOG_KEY,
+    {
+      api_host: "https://app.posthog.com",
+    }
+  );
 
-  posthog.identify(profile || "guest");
+  posthog.capture("app_opened");
 
-  posthog.capture('app_opened');
+}, []);
+
+useEffect(() => {
+
+  // ✅ Identify user/profile on change
+  posthog.identify(
+    profile || "guest"
+  );
+
 }, [profile]);
 
   const switchProfile = (newProfile) => {
@@ -1589,6 +1625,8 @@ useEffect(() => {
     normalizeSymbol(d.symbol)
   );
 
+    console.log("[prices] request symbols:", symbols);
+
     const res = await fetch(`${API_URL}/update-prices`, {
       method: "POST",
       headers: {
@@ -1606,6 +1644,13 @@ useEffect(() => {
 
   const json = await safeJson(res);
   const backendData = json.data || [];
+
+  console.log(
+    `[prices] response: ${backendData.length}/${symbols.length} prices received`
+  );
+  backendData.forEach((item) => {
+    console.log(`[prices] ${item.symbol} = ${item.currentPrice}`);
+  });
 
   const priceMap = new Map(
   backendData.map(p => [
@@ -2065,6 +2110,16 @@ const summary = {
   new: diffData.filter(d => d.type === "NEW").length,
   updated: diffData.filter(d => d.type === "UPDATED").length,
   removed: diffData.filter(d => d.type === "REMOVED").length,
+};
+
+const aiPortfolioSnapshot = {
+  totalValue,
+  totalInvestment,
+  totalPnL,
+  totalPnLPct,
+  assetTotals,
+  healthScore,
+  niftyPct,
 };
 
 if (!profile) {
@@ -5339,6 +5394,13 @@ const clampedPosition = Math.max(0, Math.min(100, position));
   </div>
 )}
       </main>
+      <AIChat
+        apiUrl={API_URL}
+        profile={profile}
+        holdings={cleanData}
+        portfolio={aiPortfolioSnapshot}
+        theme={theme}
+      />
     </div>
   );
 }

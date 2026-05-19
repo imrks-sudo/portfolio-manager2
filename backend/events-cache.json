@@ -1,6 +1,32 @@
 {
   "active": [
     {
+      "symbol": "PURVA",
+      "type": "RESULT",
+      "title": "Results announced",
+      "rawTitle": "Puravankara Limited has informed the Exchange regarding the submission of copies of newspaper publications pertaining to the Audited Standalone and Consolidated Financial Results for the quarter and financial year ended March 31, 2026.",
+      "recordDate": null,
+      "date": "2026-05-19"
+    },
+    {
+      "symbol": "PTL",
+      "type": "RESULT",
+      "title": "Results announced",
+      "rawTitle": "PTL Enterprises Limited has informed the Exchange regarding 'financial results for the period ended 31-Mar-2026'.",
+      "recordDate": "31-Mar-2026",
+      "date": "2026-05-19"
+    },
+    {
+      "symbol": "SHIVAMILLS",
+      "type": "ACQUISITION",
+      "title": "Acquisition update",
+      "rawTitle": " S V ALAGAPPAN has Submitted to the Exchange a copy of Disclosure under Regulation 31(4) of the Securities and Exchange Board of India (Substantial Acquisition of Shares and Takeovers) Regulations, 2011.",
+      "recordDate": null,
+      "date": "2026-05-19"
+    }
+  ],
+  "archive": [
+    {
       "symbol": "TVSMOTOR",
       "type": "MEETING",
       "title": "Board meeting update",
@@ -129,6 +155,5 @@
       "date": "2026-05-11"
     }
   ],
-  "archive": [],
-  "lastFetchTime": 1778658610969
+  "lastFetchTime": 1779171318708
 }
