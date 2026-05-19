@@ -12,25 +12,18 @@ const MAX_MESSAGE_LENGTH = 1000;
 const createAiChatRouter = ({ getEvents } = {}) => {
   const router = express.Router();
 
-  // 🔐 Protect AI endpoint
-  router.use((req, res, next) => {
-
-    const key = req.headers["x-api-key"];
-
-    if (
-      process.env.API_KEY &&
-      key !== process.env.API_KEY
-    ) {
-      return res.status(401).json({
-        success: false,
-        error: "Unauthorized",
-      });
-    }
-
-    next();
-  });
-
   router.post("/api/ai-chat", async (req, res) => {
+     const key = req.headers["x-api-key"];
+
+  if (
+    process.env.API_KEY &&
+    key !== process.env.API_KEY
+  ) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized",
+    });
+  }
     try {
       const message = String(req.body?.message || "").trim();
 
