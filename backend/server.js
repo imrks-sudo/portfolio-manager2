@@ -597,6 +597,15 @@ const fetchCorporateActions = async () => {
 
     const data = res.data || [];
 
+    if (!data.length) {
+
+  console.log(
+    "⚠️ NSE returned empty events response → preserving cache"
+  );
+
+  return;
+}
+
     const getCleanTitle = (type) => {
       switch (type) {
         case "DIVIDEND":   return "Dividend declared";
@@ -640,14 +649,76 @@ const fetchCorporateActions = async () => {
         type = "ACQUISITION";
       }
 
-      const date = item.sort_date
-        ? item.sort_date.split(" ")[0]
-        : null;
+    const announcementDate = item.sort_date
+  ? item.sort_date.split(" ")[0]
+  : null;
 
-      const recordDate = extractRecordDate(rawTitle);
+const recordDate =
+  extractRecordDate(rawTitle);
 
-      return { symbol, type, title: getCleanTitle(type), rawTitle, recordDate, date };
-    });
+// ✅ Safe date normalizer
+const normalizeDate = (value) => {
+
+  if (!value) return null;
+
+  // Already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  // DD-MMM-YYYY
+  const match = value.match(
+    /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/
+  );
+
+  if (!match) return null;
+
+  const [, dd, mon, yyyy] = match;
+
+  const months = {
+    Jan: "01",
+    Feb: "02",
+    Mar: "03",
+    Apr: "04",
+    May: "05",
+    Jun: "06",
+    Jul: "07",
+    Aug: "08",
+    Sep: "09",
+    Oct: "10",
+    Nov: "11",
+    Dec: "12",
+  };
+
+  const month =
+    months[
+      mon.charAt(0).toUpperCase() +
+      mon.slice(1).toLowerCase()
+    ];
+
+  if (!month) return null;
+
+  return `${yyyy}-${month}-${dd.padStart(2, "0")}`;
+};
+
+const effectiveDate =
+  normalizeDate(
+    recordDate || announcementDate
+  );
+
+return {
+  symbol,
+  type,
+  title: getCleanTitle(type),
+  rawTitle,
+
+  announcementDate,
+  recordDate,
+
+  date: effectiveDate,
+};
+
+}); // ✅ IMPORTANT: closes parsed.map()
 
     // STEP 2: Keep only meaningful
     const meaningful = parsed.filter((e) => e.type !== "OTHER");
@@ -688,16 +759,21 @@ const fetchCorporateActions = async () => {
       if (!e.date) return;
 
       const eventDate = new Date(e.date);
+
+      if (isNaN(eventDate)) {
+        return;
+      }
+
       eventDate.setHours(0, 0, 0, 0);
 
       const diff = (eventDate - today) / (1000 * 60 * 60 * 24);
 
-      // Active: past 3 days to next 7 days
-      if (diff >= -3 && diff <= 7) {
+      // Active: past 7 days to next 14 days
+      if (diff >= -7 && diff <= 14) {
         active.push(e);
       }
-      // Archive: older than 3 days, within 30 days
-      else if (diff < -3 && diff >= -30) {
+      // Archive: older than 7 days, within 30 days
+      else if (diff < -7 && diff >= -30) {
         archive.push(e);
       }
       // Older than 30 days: drop (expired)
@@ -713,8 +789,8 @@ archive.sort(
 
     // STEP 6: Store (limit size) and persist to disk
     EVENTS = {
-      active: active.slice(0, 20),
-      archive: archive.slice(0, 50),
+      active,
+      archive,
     };
 
     lastFetchTime = Date.now();

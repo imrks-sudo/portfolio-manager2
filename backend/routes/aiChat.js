@@ -71,7 +71,8 @@ const createAiChatRouter = ({ getEvents } = {}) => {
       const intent = parseIntent(
         message,
         holdings,
-        context
+        context,
+        profile, 
       );
 
       const analysis = analyzePortfolio({

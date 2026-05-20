@@ -12,10 +12,15 @@ const buildPrompt = ({ message, profile, analysis, technical, intent }) => {
     (item) => item.indicators?.hasData
   );
 
+  // Full list of symbols actually in the portfolio — used by Gemini to
+  // verify a question is about a real holding before answering.
+  const portfolioSymbols = (analysis.holdings || []).map((h) => h.symbol);
+
   const payload = {
     profile,
     userQuestion: message,
     intent,
+    portfolioSymbols,
     portfolioSummary: analysis.summary,
     topHoldings: (analysis.holdings || [])
       .slice()
@@ -27,19 +32,35 @@ const buildPrompt = ({ message, profile, analysis, technical, intent }) => {
     technicalSignals: technical.signals || [],
     technicalIndicators: usableIndicators,
     targetSymbols: intent.mentionedSymbols || [],
+    unmatchedSymbols: intent.unmatchedSymbols || [],
   };
 
   return [
     "You are WatchMyFolio's AI Portfolio Analyst.",
-    "Use only the JSON facts below. Do not invent prices, events, ratings, targets, or future returns.",
-    "This is educational portfolio analysis, not financial advice.",
-    "Keep the answer concise: 3 to 6 short bullets or sentences.",
-    "When targetSymbols are present, answer only about those symbols.",
-    "Include exact numbers from the facts: price, allocation percentage, P&L percentage, 52-week range position, PE, RSI, MACD, or daily move when available.",
-    "Prefer direct, factual wording. Mention concentration, valuation, momentum, diversification, and event impact only when present in the facts.",
-    "Never guarantee returns or tell the user to buy/sell.",
-    "If technicalSignals are present, answer from those signals instead of saying market data is unavailable.",
     "",
+
+    // ── Data rules ──────────────────────────────────────────────────
+    "STRICT DATA RULES — follow these exactly:",
+    "1. Use ONLY the JSON facts below. Do not use training data for prices, events, PE, or fundamentals.",
+    "2. If unmatchedSymbols is non-empty, respond ONLY with:",
+    '   "[symbol] is not in this portfolio. Ask me about a holding you own."',
+    '   List the portfolioSymbols if helpful. Do not provide any other analysis.',
+    "3. When targetSymbols are present, answer ONLY about those symbols.",
+    "4. Never invent prices, events, analyst ratings, targets, or future returns.",
+    "5. If technicalSignals are present, answer from those — do not say data is unavailable.",
+    "",
+
+    // ── Response format ─────────────────────────────────────────────
+    "FORMAT — follow this structure for every response:",
+    "• Start with a one-line summary (the key finding).",
+    "• Use short bullets (one fact per line, prefix with '• ').",
+    "• Group related facts under a short heading (e.g. '📍 Concentration', '📈 Momentum').",
+    "• Always include exact numbers: price, P&L %, allocation %, 52W range position, PE, RSI, MACD when available.",
+    "• End with a single '💡' insight line summarising the main takeaway.",
+    "• Total length: 5–10 lines. No prose paragraphs.",
+    "• Never say 'buy', 'sell', or guarantee returns. This is educational analysis.",
+    "",
+
     JSON.stringify(payload, null, 2),
   ].join("\n");
 };

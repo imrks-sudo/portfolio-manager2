@@ -1,6 +1,22 @@
 {
   "active": [
     {
+      "symbol": "JAYBARMARU",
+      "type": "RESULT",
+      "title": "Results announced",
+      "rawTitle": "Jay Bharat Maruti Limited has informed the Exchange about Copy of Newspaper Publication for Audit Financial Results (Standalone and Consolidated) of the Company for the 4th Quarter and Financial Year ended March 31, 2026",
+      "recordDate": null,
+      "date": "2026-05-20"
+    },
+    {
+      "symbol": "POLYMED",
+      "type": "RESULT",
+      "title": "Results announced",
+      "rawTitle": "Intimation of Investors/Analysts Call for the Audited Financial Results for the quarter and year ended 31st March, 2026.",
+      "recordDate": null,
+      "date": "2026-05-20"
+    },
+    {
       "symbol": "PURVA",
       "type": "RESULT",
       "title": "Results announced",
@@ -155,5 +171,5 @@
       "date": "2026-05-11"
     }
   ],
-  "lastFetchTime": 1779171318708
+  "lastFetchTime": 1779257032343
 }
