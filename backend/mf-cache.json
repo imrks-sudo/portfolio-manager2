@@ -22811,7 +22811,7 @@
   },
   {
     "code": 106793,
-    "name": "HDFC ARBITRAGE FUND - Wholesale Growth Option",
+    "name": "HDFC ARBITRAGE FUND - Regular Plan -Growth Option",
     "nav": null
   },
   {
@@ -107011,12 +107011,12 @@
   },
   {
     "code": 129051,
-    "name": "HDFC ARBITRAGE FUND - Wholesale Monthly IDCW Option  ",
+    "name": "HDFC ARBITRAGE FUND - Regular Plan - Monthly IDCW Option",
     "nav": null
   },
   {
     "code": 129052,
-    "name": "HDFC ARBITRAGE FUND - Wholesale Growth Option - Direct Plan",
+    "name": "HDFC ARBITRAGE FUND -Direct Plan - Growth Option",
     "nav": null
   },
   {
@@ -107026,7 +107026,7 @@
   },
   {
     "code": 129054,
-    "name": "HDFC ARBITRAGE FUND - Wholesale Monthly IDCW - Direct Plan",
+    "name": "HDFC ARBITRAGE FUND - Monthly IDCW - Direct Plan",
     "nav": null
   },
   {
@@ -187992,6 +187992,21 @@
   {
     "code": 154344,
     "name": "Invesco India Nifty Bank Index Fund - Regular Plan - Growth",
+    "nav": null
+  },
+  {
+    "code": 154347,
+    "name": "Edelweiss Nifty Next 50 ETF",
+    "nav": null
+  },
+  {
+    "code": 154353,
+    "name": "SBI Nifty Smallcap 250 ETF",
+    "nav": null
+  },
+  {
+    "code": 154354,
+    "name": "SBI Nifty200 Value 30 ETF",
     "nav": null
   },
   {

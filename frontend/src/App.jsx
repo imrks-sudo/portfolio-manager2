@@ -51,8 +51,11 @@ const safeJson = async (res) => {
       suggestions: json.suggestions || [],
       invalid: json.invalid || [],
       data: json.data || [],
+      failed: json.failed || [],
       active: json.active || [],
       archive: json.archive || [],
+      updated: Number(json.updated) || 0,
+      nseBlocked: json.nseBlocked === true,
       success: json.success === true
     };
   } catch (err) {
@@ -62,8 +65,11 @@ const safeJson = async (res) => {
       suggestions: [],
       invalid: [],
       data: [],
+      failed: [],
       active: [],
       archive: [],
+      updated: 0,
+      nseBlocked: false,
       success: false
     };
   }
@@ -1644,6 +1650,15 @@ useEffect(() => {
 
   const json = await safeJson(res);
   const backendData = json.data || [];
+  const failedCount = json.failed?.length || 0;
+
+  if (!backendData.length) {
+    throw new Error(
+      json.nseBlocked
+        ? "NSE blocked live price requests. No prices were changed."
+        : "No live prices were returned. No prices were changed."
+    );
+  }
 
   console.log(
     `[prices] response: ${backendData.length}/${symbols.length} prices received`
@@ -1659,10 +1674,6 @@ useEffect(() => {
   ])
  );
 
-  const prevPrices = new Map(
-  data.map((d) => [normalizeSymbol(d.symbol), d.currentPrice || 0])
-);
-
 const updated = data.map((item) => {
   const key = normalizeSymbol(item.symbol);
   const match = priceMap.get(key);
@@ -1670,7 +1681,6 @@ const updated = data.map((item) => {
   if (!match) return item;
 
   const currentPrice = Number(match.currentPrice || 0);
-  prevPrices.get(normalizeSymbol(item.symbol))
 
 // 🔥 DAILY CHANGE CALCULATION (FIXED)
   const dailyChange = Number(match.change || 0);
@@ -1728,11 +1738,20 @@ setLastUpdated(new Date());
 
     await fetchEvents();
 
-    alert("✅ Prices updated successfully");
+    if (backendData.length < symbols.length || failedCount > 0) {
+      alert(
+        `Updated ${backendData.length}/${symbols.length} prices. ` +
+          (json.nseBlocked
+            ? "NSE blocked the remaining live requests."
+            : "Some symbols could not be updated.")
+      );
+    } else {
+      alert("✅ Prices updated successfully");
+    }
 
   } catch (err) {
     console.error("❌ Price update failed", err);
-    alert("❌ Failed to update prices");
+    alert(err.message || "❌ Failed to update prices");
   } finally {
     setUpdatingPrices(false);
   }
@@ -1806,7 +1825,11 @@ const mapRow = (row, headers) => {
   if (!symbol) return null;
 
   return {
-    symbol: String(symbol).trim().toUpperCase(),
+    symbol: normalizeSymbol(
+  String(symbol)
+    .trim()
+    .toUpperCase()
+),
     quantity: Number(String(qty || "0").replace(/,/g, "")) || 0,
     avgPrice: Number(String(avg || "0").replace(/,/g, "")) || 0,
     sector: String(sector || "").trim(),
@@ -1890,9 +1913,10 @@ const handleParsedData = async (results) => {
         const sector = get(["sector"]);
 
         if (!symbol) return null;
-
-        return {
-          symbol: String(symbol).trim(),
+          return {
+  symbol: normalizeSymbol(
+    String(symbol).trim()
+  ),
           quantity:
             Number(String(qty || "0").replace(/,/g, "")) || 0,
           avgPrice:

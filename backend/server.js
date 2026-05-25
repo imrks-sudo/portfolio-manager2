@@ -6,10 +6,13 @@ const CACHE_FILE = path.join(__dirname, "mf-cache.json");
 
 // ✅ FIX: Persist events to disk (survives server restarts + Render sleep)
 const EVENTS_CACHE_FILE = path.join(__dirname, "events-cache.json");
+const PRICE_CACHE_FILE = path.join(__dirname, "prices-cache.json");
+const PRICE_CACHE_VERSION = 2;
 
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const yahooFinance = require("yahoo-finance2").default;
 const cron = require("node-cron");
 const rateLimit = require("express-rate-limit");
 const createAiChatRouter = require("./routes/aiChat");
@@ -18,6 +21,8 @@ const createAiChatRouter = require("./routes/aiChat");
 // ✅ FIX: Initialize as proper object (was `[]` which broke EVENTS.active/.archive reads)
 let EVENTS = { active: [], archive: [] };
 let MF_LIST = [];
+let PRICE_CACHE = {};
+let priceRefreshRunning = false;
 
 // ✅ FIX: Load events from disk on startup so they survive restarts
 const loadEventsCache = () => {
@@ -73,6 +78,253 @@ const normalizeSymbol = (symbol) =>
     .replace(/-E$/, "")
     .replace(/-GB$/, "")
     .trim();
+
+const toFiniteNumber = (value) => {
+  const raw =
+    value && typeof value === "object" && "raw" in value ? value.raw : value;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const round2 = (value) => Number(toFiniteNumber(value).toFixed(2));
+
+const toYahooSymbol = (symbol) => {
+
+  const clean =
+    normalizeSymbol(symbol);
+
+  if (!clean) return "";
+
+  // ✅ Already mapped
+  if (clean.includes(".")) {
+    return clean;
+  }
+
+  // ✅ SGB support
+  if (clean.startsWith("SGB")) {
+    return `${clean}.NS`;
+  }
+
+  return `${clean}.NS`;
+};
+
+const validateYahooSymbol = async (symbolRaw) => {
+
+  const symbol =
+    normalizeSymbol(symbolRaw);
+
+  try {
+
+    const yahooSymbol =
+      toYahooSymbol(symbol);
+
+    const response =
+      await axios.get(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+          yahooSymbol
+        )}?range=1d&interval=1d`,
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0",
+            Accept: "application/json",
+          },
+          timeout: 5000,
+        }
+      );
+
+    const result =
+      response.data?.chart?.result?.[0];
+
+    const meta =
+      result?.meta || {};
+
+    const price =
+      Number(meta.regularMarketPrice || 0);
+
+    return (
+      !!result &&
+      (
+        price > 0 ||
+        meta.symbol
+      )
+    );
+
+  } catch (err) {
+
+    return false;
+  }
+};
+
+const isPriceCacheFresh = (item) => {
+  const fetchedAt = Date.parse(item?.fetchedAt || "");
+  return (
+    item?.cacheVersion === PRICE_CACHE_VERSION &&
+    fetchedAt > 0 &&
+    Date.now() - fetchedAt < 5 * 60 * 1000
+  );
+};
+
+const loadPriceCache = () => {
+  try {
+    if (!fs.existsSync(PRICE_CACHE_FILE)) return;
+
+    const parsed = JSON.parse(fs.readFileSync(PRICE_CACHE_FILE, "utf-8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      PRICE_CACHE = parsed;
+      console.log(`Loaded price cache: ${Object.keys(PRICE_CACHE).length}`);
+    }
+  } catch (err) {
+    console.error("Failed to load price cache:", err.message);
+    PRICE_CACHE = {};
+  }
+};
+
+const savePriceCache = () => {
+  try {
+    fs.writeFileSync(PRICE_CACHE_FILE, JSON.stringify(PRICE_CACHE, null, 2));
+  } catch (err) {
+    console.error("Failed to save price cache:", err.message);
+  }
+};
+
+const getCachedPrice = (symbol) => PRICE_CACHE[normalizeSymbol(symbol)] || null;
+
+const cachePrice = (quote, { persist = true } = {}) => {
+  const symbol = normalizeSymbol(quote.symbol);
+  if (!symbol || !quote.currentPrice) return quote;
+
+  const cached = {
+    ...quote,
+    symbol,
+    cacheVersion: PRICE_CACHE_VERSION,
+    fetchedAt: quote.fetchedAt || new Date().toISOString(),
+  };
+
+  PRICE_CACHE[symbol] = cached;
+  if (persist) savePriceCache();
+  return cached;
+};
+
+const fetchYahooChartQuote = async (symbolRaw) => {
+  const symbol = normalizeSymbol(symbolRaw);
+
+  const response = await axios.get(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      toYahooSymbol(symbol)
+    )}?range=1y&interval=1d`,
+    {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+      },
+      timeout: 10000,
+    }
+  );
+
+  const result = response.data?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const quote = result?.indicators?.quote?.[0] || {};
+  const closes = (quote.close || []).map(toFiniteNumber).filter(Boolean);
+  const highs = (quote.high || []).map(toFiniteNumber).filter(Boolean);
+  const lows = (quote.low || []).map(toFiniteNumber).filter(Boolean);
+  const price = toFiniteNumber(meta.regularMarketPrice) || closes.at(-1);
+  const previousClose =
+    closes.at(-2) ||
+    toFiniteNumber(meta.previousClose) ||
+    toFiniteNumber(meta.chartPreviousClose);
+
+  if (!price) {
+    throw new Error(`Yahoo price unavailable for ${symbol}`);
+  }
+
+  const change = previousClose ? price - previousClose : 0;
+
+  return {
+    symbol,
+    currentPrice: round2(price),
+    change: round2(change),
+    pChange: previousClose ? round2((change / previousClose) * 100) : 0,
+    high52:
+      round2(toFiniteNumber(meta.fiftyTwoWeekHigh)) ||
+      round2(Math.max(...highs, 0)),
+    low52:
+      round2(toFiniteNumber(meta.fiftyTwoWeekLow)) ||
+      round2(Math.min(...lows.filter(Boolean))),
+    pe: 0,
+    marketCap: 0,
+    source: "Yahoo chart",
+    stale: false,
+    fetchedAt: new Date().toISOString(),
+  };
+};
+
+const fetchYahooQuote = async (symbolRaw) => {
+  const symbol = normalizeSymbol(symbolRaw);
+  let quote;
+
+  try {
+    quote = await yahooFinance.quote(toYahooSymbol(symbol));
+  } catch (err) {
+    console.log(`[prices] Yahoo quote failed for ${symbol}: ${err.message}`);
+    return fetchYahooChartQuote(symbol);
+  }
+
+  const price =
+    toFiniteNumber(quote?.regularMarketPrice) ||
+    toFiniteNumber(quote?.postMarketPrice) ||
+    toFiniteNumber(quote?.preMarketPrice);
+
+  if (!price) {
+    return fetchYahooChartQuote(symbol);
+  }
+
+  const previousClose = toFiniteNumber(quote?.regularMarketPreviousClose);
+  const change =
+    toFiniteNumber(quote?.regularMarketChange) ||
+    (previousClose ? price - previousClose : 0);
+  const pChange =
+    toFiniteNumber(quote?.regularMarketChangePercent) ||
+    (previousClose ? (change / previousClose) * 100 : 0);
+
+  return {
+    symbol,
+    currentPrice: round2(price),
+    change: round2(change),
+    pChange: round2(pChange),
+    high52: round2(quote?.fiftyTwoWeekHigh),
+    low52: round2(quote?.fiftyTwoWeekLow),
+    pe: round2(quote?.trailingPE || quote?.forwardPE),
+    marketCap: toFiniteNumber(quote?.marketCap),
+    source: "Yahoo",
+    stale: false,
+    fetchedAt: new Date().toISOString(),
+  };
+};
+
+const parseNseQuote = (symbolRaw, response) => {
+  const symbol = normalizeSymbol(symbolRaw);
+  const price = toFiniteNumber(response.data?.priceInfo?.lastPrice);
+  const whl = response.data?.priceInfo?.weekHighLow || {};
+  const shares = toFiniteNumber(response.data?.securityInfo?.issuedCap);
+
+  if (!price) {
+    throw new Error(`No live NSE price returned for ${symbol}`);
+  }
+
+  return {
+    symbol,
+    currentPrice: round2(price),
+    change: round2(response.data?.priceInfo?.change),
+    pChange: round2(response.data?.priceInfo?.pChange),
+    high52: round2(whl.max),
+    low52: round2(whl.min),
+    pe: round2(response.data?.metadata?.pe),
+    marketCap: shares * price,
+    source: "NSE",
+    stale: false,
+    fetchedAt: new Date().toISOString(),
+  };
+};
 
 // 🔔 FETCH AMFI DATA
 const fetchAMFI = async () => {
@@ -218,6 +470,221 @@ const tough = require("tough-cookie");
 
 const jar = new tough.CookieJar();
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const NSE_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://www.nseindia.com/",
+  Origin: "https://www.nseindia.com",
+};
+
+const NSE_HTML_HEADERS = {
+  ...NSE_HEADERS,
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+};
+
+const createNseClient = () =>
+  wrapper(
+    axios.create({
+      baseURL: "https://www.nseindia.com",
+      jar,
+      withCredentials: true,
+      headers: NSE_HEADERS,
+      timeout: 10000,
+    })
+  );
+
+const isNseBlocked = (err) => {
+  const status = err?.response?.status;
+  return status === 401 || status === 403 || status === 429;
+};
+
+const getNseErrorMessage = (err) => {
+  const status = err?.response?.status;
+  return status ? `NSE returned ${status}` : err.message;
+};
+
+const primeNseSession = async (nse, symbol = "") => {
+  await nse.get("/", {
+    headers: NSE_HTML_HEADERS,
+  });
+
+  await sleep(400);
+
+  const quotePath = symbol
+    ? `/get-quotes/equity?symbol=${encodeURIComponent(symbol)}`
+    : "/market-data/live-equity-market";
+
+  await nse.get(quotePath, {
+    headers: {
+      ...NSE_HTML_HEADERS,
+      Referer: "https://www.nseindia.com/",
+    },
+  });
+};
+
+const requestNseQuote = async (nse, symbol) =>
+  nse.get("/api/quote-equity", {
+    params: { symbol },
+    headers: {
+      ...NSE_HEADERS,
+      Referer: `https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(
+        symbol
+      )}`,
+    },
+  });
+
+const fetchNseQuote = async (nse, symbol) => {
+  try {
+    return await requestNseQuote(nse, symbol);
+  } catch (err) {
+    if (!isNseBlocked(err)) {
+      throw err;
+    }
+
+    console.log(`[prices] NSE blocked ${symbol}, re-priming session once`);
+    await primeNseSession(nse, symbol);
+    await sleep(900);
+    return requestNseQuote(nse, symbol);
+  }
+};
+
+const fetchStockPrice = async (
+  symbolRaw,
+  { skipNse = false } = {}
+) => {
+
+  const symbol =
+    normalizeSymbol(symbolRaw);
+
+  const cached =
+    getCachedPrice(symbol);
+
+  // ✅ FIRST: Fresh cache
+  if (isPriceCacheFresh(cached)) {
+
+    return {
+      ...cached,
+      symbol,
+      source: `${cached.source || "cache"} cache`,
+      stale: false,
+    };
+  }
+
+  // ✅ SECOND: Yahoo (PRIMARY)
+  try {
+
+    const yahooQuote =
+      await fetchYahooQuote(symbol);
+
+    return cachePrice(yahooQuote);
+
+  } catch (err) {
+
+    console.log(
+      `[prices] Yahoo failed for ${symbol}: ${err.message}`
+    );
+  }
+
+  // ✅ THIRD: stale cache fallback
+  if (cached?.currentPrice) {
+
+    return {
+      ...cached,
+      symbol,
+      source: `${cached.source || "price"} stale cache`,
+      stale: true,
+    };
+  }
+
+  // ✅ LAST RESORT: NSE
+  if (!skipNse) {
+
+    try {
+
+      const nse =
+        createNseClient();
+
+      await primeNseSession(
+        nse,
+        symbol
+      );
+
+      await sleep(700);
+
+      const response =
+        await fetchNseQuote(
+          nse,
+          symbol
+        );
+
+      return cachePrice(
+        parseNseQuote(
+          symbol,
+          response
+        )
+      );
+
+    } catch (err) {
+
+      console.log(
+        `[prices] NSE failed for ${symbol}: ${getNseErrorMessage(err)}`
+      );
+    }
+  }
+
+  // ✅ FINAL: SGB special fallback
+  if (
+    symbol.startsWith("SGB") &&
+    cached?.currentPrice
+  ) {
+
+    return {
+      ...cached,
+      symbol,
+      stale: true,
+      source: "SGB cache",
+    };
+  }
+
+  throw new Error(
+    `No price source available for ${symbol}`
+  );
+};
+
+
+const refreshCachedPrices = async () => {
+  if (priceRefreshRunning) return;
+
+  const symbols = Object.keys(PRICE_CACHE);
+  if (!symbols.length) return;
+
+  priceRefreshRunning = true;
+
+  try {
+    let refreshed = 0;
+
+    for (const symbol of symbols) {
+      try {
+        cachePrice(await fetchYahooQuote(symbol), { persist: false });
+        refreshed++;
+        await sleep(300);
+      } catch (err) {
+        console.log(`[prices] cache refresh failed for ${symbol}: ${err.message}`);
+      }
+    }
+
+    savePriceCache();
+    console.log(`[prices] cache refreshed: ${refreshed}/${symbols.length}`);
+  } finally {
+    priceRefreshRunning = false;
+  }
+};
+
 // 🔧 NORMALIZE
 const matchMF = (input) => {
   if (!MF_LIST.length) {
@@ -355,23 +822,9 @@ app.post("/update-prices", async (req, res) => {
     console.log(`[prices] update requested for ${symbols.length} symbols`);
 
     const results = [];
+    const failedSymbols = [];
     let successCount = 0;
-
-    const nse = axios.create({
-      baseURL: "https://www.nseindia.com",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
-        Referer: "https://www.nseindia.com/",
-      },
-      timeout: 5000,
-    });
-
-    try {
-      await nse.get("/");
-    } catch {
-      console.log("⚠️ NSE cookie init failed");
-    }
+    let nseBlocked = false;
 
     for (const symbolRaw of symbols) {
       try {
@@ -386,6 +839,9 @@ app.post("/update-prices", async (req, res) => {
         let low52 = 0;
         let pe = 0;
         let marketCap = 0;
+        let source = "";
+        let stale = false;
+        let fetchedAt = null;
 
         if (s.includes("fund") || s.includes("plan")) {
 
@@ -396,6 +852,10 @@ app.post("/update-prices", async (req, res) => {
 
           if (!search.data?.length) {
             console.log(`❌ MF not found: ${symbol}`);
+            failedSymbols.push({
+              symbol: symbolRaw,
+              reason: "MF not found",
+            });
             continue;
           }
 
@@ -431,46 +891,67 @@ app.post("/update-prices", async (req, res) => {
           const nav = navRes.data?.data?.[0]?.nav;
 
           price = Number(nav) || 0;
+          source = "MFAPI";
+          fetchedAt = new Date().toISOString();
 
           if (!price) {
             console.log(`⚠️ No NAV for: ${symbol}`);
+            failedSymbols.push({
+              symbol: symbolRaw,
+              reason: "No NAV returned",
+            });
             continue;
           }
         } else {
           if (symbol.endsWith("-E")) symbol = symbol.replace("-E", "");
           if (symbol.endsWith("-GB")) symbol = symbol.replace("-GB", "");
 
-          let response;
-
           try {
-            response = await nse.get(
-              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
-            );
+            const quote =
+  await fetchStockPrice(
+    symbol,
+    {
+      skipNse: nseBlocked,
+    }
+  );
+
+            price = Number(quote.currentPrice) || 0;
+            high52 = Number(quote.high52) || 0;
+            low52 = Number(quote.low52) || 0;
+            change = Number(quote.change) || 0;
+            pChange = Number(quote.pChange) || 0;
+            pe = Number(quote.pe) || 0;
+            marketCap = Number(quote.marketCap) || 0;
+            source = quote.source || "";
+            stale = quote.stale === true;
+            fetchedAt = quote.fetchedAt || null;
+
+            if (quote.nseBlocked) {
+              nseBlocked = true;
+            }
           } catch (err) {
-            console.log("⚠️ NSE retry for", symbol);
+            if (isNseBlocked(err)) {
+              nseBlocked = true;
+              const reason = getNseErrorMessage(err);
+              console.log(
+                `[prices] NSE blocked live quote requests; stopping NSE calls. ${reason}`
+              );
+              failedSymbols.push({
+                symbol: symbolRaw,
+                reason,
+              });
+              continue;
+            }
 
-            await nse.get("/");
-            response = await nse.get(
-              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
-            );
+            throw err;
           }
-
-          price = Number(response.data?.priceInfo?.lastPrice) || 0;
-
-          const whl = response.data?.priceInfo?.weekHighLow || {};
-
-          high52 = Number(whl.max) || 0;
-          low52 = Number(whl.min) || 0;
-
-          change = Number(response.data?.priceInfo?.change) || 0;
-          pChange = Number(response.data?.priceInfo?.pChange) || 0;
-          pe = Number(response.data?.metadata?.pe) || 0;
-
-          const shares = Number(response.data?.securityInfo?.issuedCap) || 0;
-          marketCap = shares * price;
 
           if (!price) {
             console.log(`⚠️ No price for: ${symbol}`);
+            failedSymbols.push({
+              symbol: symbolRaw,
+              reason: "No price returned",
+            });
             continue;
           }
         }
@@ -484,7 +965,10 @@ app.post("/update-prices", async (req, res) => {
             high52,
             low52,
             pe,
-            marketCap
+            marketCap,
+            source,
+            stale,
+            fetchedAt
           });
 
         console.log(
@@ -498,10 +982,14 @@ app.post("/update-prices", async (req, res) => {
 
         successCount++;
 
-        await new Promise((r) => setTimeout(r, 300));
+        await sleep(750);
 
       } catch (err) {
         console.log(`❌ Failed: ${symbolRaw}`, err.message);
+        failedSymbols.push({
+          symbol: symbolRaw,
+          reason: getNseErrorMessage(err),
+        });
       }
     }
 
@@ -509,6 +997,8 @@ app.post("/update-prices", async (req, res) => {
       success: true,
       updated: successCount,
       data: results,
+      failed: failedSymbols,
+      nseBlocked,
     });
 
     console.log(`[prices] update completed: ${successCount}/${symbols.length}`);
@@ -575,15 +1065,7 @@ const fetchCorporateActions = async () => {
   try {
     console.log("📡 Fetching NSE corporate announcements...");
 
-    const nse = axios.create({
-      baseURL: "https://www.nseindia.com",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
-        Referer: "https://www.nseindia.com/",
-      },
-      timeout: 5000,
-    });
+    const nse = createNseClient();
 
     try {
       await nse.get("/");
@@ -872,154 +1354,167 @@ app.get("/api/events", async (req, res) => {
 
 app.post("/api/validate-upload", async (req, res) => {
   try {
-    const rows = (req.body.rows || [])
-  .slice(0, 50);
 
-    const valid = [];
-    const suggestions = [];
-    const invalid = [];
+  const rows = (req.body.rows || [])
+    .slice(0, 50);
 
-    const nse = axios.create({
-      baseURL: "https://www.nseindia.com",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
-        Referer: "https://www.nseindia.com/",
-      },
-      timeout: 5000,
-    });
+  const valid = [];
+  const suggestions = [];
+  const invalid = [];
 
-    if (!MF_LIST.length) {
-      console.error("⚠️ MF_LIST empty");
+  for (const row of rows) {
 
-      return res.json({
-        success: true,
-        valid: [],
-        suggestions: [],
-        invalid: rows.map((r) => ({
-          input: r.symbol,
-          type: "MF",
-        })),
-      });
-    }
+    const original =
+      (row.symbol || "").toUpperCase();
 
-    try {
-      await nse.get("/");
-    } catch {}
+    const symbol =
+      normalizeSymbol(original);
 
-    await Promise.all(
-      rows.map(async (row) => {
-        const original = (row.symbol || "").toUpperCase();
-        const symbol = normalizeSymbol(original);
+    const isMF =
+      symbol.toLowerCase().includes("fund") ||
+      symbol.toLowerCase().includes("plan");
 
-        const isMF =
-          symbol.toLowerCase().includes("fund") ||
-          symbol.toLowerCase().includes("plan");
+    // =========================
+    // ✅ MUTUAL FUNDS
+    // =========================
 
-        if (isMF) {
-          let result = matchMF(symbol);
+    if (isMF) {
 
-          if (result.type === "invalid") {
-            try {
-              const search = await axios.get(
-                "https://api.mfapi.in/mf/search?q=" +
-                  encodeURIComponent(symbol)
-              );
+      if (!MF_LIST.length) {
 
-              if (search.data?.length) {
-                result = {
-                  type: "suggest",
-                  matches: search.data.slice(0, 5).map((m) => ({
-                    name: m.schemeName,
-                    code: m.schemeCode,
-                  })),
-                };
-              }
-            } catch (err) {
-              console.log("⚠️ MFAPI fallback failed:", err.message);
-            }
-          }
+  console.log(
+    "⚠️ MF_LIST empty → skipping MF validation"
+  );
 
-          if (result.type === "valid") {
-            valid.push({
-              input: original,
-              type: "MF",
-              final: result.match.name,
-              code: result.match.code,
-              nav: result.match.nav,
-            });
-          } else if (result.type === "suggest") {
-            suggestions.push({
-              input: original,
-              type: "MF",
-              suggested: result.matches.map((m) => m.name),
-            });
-          } else {
-            invalid.push({
-              input: original,
-              type: "MF",
-            });
-          }
-        } else {
-          let isValid = false;
+  invalid.push({
+    input: original,
+    type: "MF",
+  });
 
-          try {
-            const resEq = await nse.get(
-              `/api/quote-equity?symbol=${encodeURIComponent(symbol)}`
+  continue;
+}
+
+      let result = matchMF(symbol);
+
+      // 🔥 MFAPI fallback
+      if (result.type === "invalid") {
+
+        try {
+
+          const search =
+            await axios.get(
+              "https://api.mfapi.in/mf/search?q=" +
+              encodeURIComponent(symbol)
             );
 
-            if (resEq.data?.info) {
-              isValid = true;
-            }
-          } catch {}
+          if (search.data?.length) {
 
-          if (!isValid) {
-            try {
-              const resSearch = await nse.get(
-                `/api/search/autocomplete?q=${encodeURIComponent(symbol)}`
-              );
+            result = {
+              type: "suggest",
 
-              const results = resSearch.data?.symbols || [];
-
-              const match = results.find(
-                (r) =>
-                  r.symbol?.toUpperCase() === symbol ||
-                  r.identifier?.toUpperCase() === symbol
-              );
-
-              if (match) {
-                isValid = true;
-              }
-            } catch {}
+              matches: search.data
+                .slice(0, 5)
+                .map((m) => ({
+                  name: m.schemeName,
+                  code: m.schemeCode,
+                })),
+            };
           }
 
-          if (isValid) {
-            valid.push({
-              input: original,
-              type: "STOCK",
-              final: symbol,
-            });
-          } else {
-            invalid.push({
-              input: original,
-              type: "STOCK",
-            });
-          }
+        } catch (err) {
+
+          console.log(
+            "⚠️ MFAPI fallback failed:",
+            err.message
+          );
         }
-      })
-    );
+      }
 
-    res.json({
-      success: true,
-      valid,
-      suggestions,
-      invalid,
-    });
+      if (result.type === "valid") {
 
-  } catch (err) {
-    console.error("❌ Validation failed", err.message);
-    res.status(500).json({ error: "Validation failed" });
+        valid.push({
+          input: original,
+          type: "MF",
+
+          final: result.match.name,
+
+          code: result.match.code,
+
+          nav: result.match.nav,
+        });
+
+      } else if (
+        result.type === "suggest"
+      ) {
+
+        suggestions.push({
+          input: original,
+          type: "MF",
+
+          suggested:
+            result.matches.map(
+              (m) => m.name
+            ),
+        });
+
+      } else {
+
+        invalid.push({
+          input: original,
+          type: "MF",
+        });
+      }
+
+    }
+
+    // =========================
+    // ✅ STOCKS (YAHOO)
+    // =========================
+
+    else {
+
+    const isValid =
+  await validateYahooSymbol(symbol);
+
+if (isValid) {
+
+  valid.push({
+    input: original,
+    type: "STOCK",
+    final: symbol,
+  });
+
+} else {
+
+  invalid.push({
+    input: original,
+    type: "STOCK",
+  });
+}
+    }
+
+    // ✅ Light throttle
+    await sleep(100);
   }
+
+  res.json({
+    success: true,
+    valid,
+    suggestions,
+    invalid,
+  });
+
+} catch (err) {
+
+  console.error(
+    "❌ Validation failed",
+    err.message
+  );
+
+  res.status(500).json({
+    error: "Validation failed"
+  });
+}
 });
 
 // 🔥 LOAD MF DATA + EVENTS CACHE BEFORE SERVER STARTS
@@ -1029,6 +1524,7 @@ const initServer = async () => {
 
     // ✅ FIX: Load persisted events first so archive/active survive restarts
     loadEventsCache();
+    loadPriceCache();
 
     // Load MF cache
     if (fs.existsSync(CACHE_FILE)) {
@@ -1085,3 +1581,4 @@ initServer();
 
 // ⏰ keep cron (after init)
 cron.schedule("0 6 * * *", fetchMFAPI);
+cron.schedule("*/5 * * * *", refreshCachedPrices);
