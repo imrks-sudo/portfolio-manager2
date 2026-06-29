@@ -32,10 +32,10 @@ const loadEventsCache = () => {
       const parsed = JSON.parse(raw);
       // Validate shape before using
       if (parsed && Array.isArray(parsed.active) && Array.isArray(parsed.archive)) {
-        EVENTS = {
-  active: parsed.active || [],
-  archive: parsed.archive || [],
-};
+        EVENTS = classifyEvents([
+          ...(parsed.active || []),
+          ...(parsed.archive || []),
+        ]);
         if (parsed.lastFetchTime) {
   lastFetchTime = parsed.lastFetchTime;
 }
@@ -79,6 +79,149 @@ const normalizeSymbol = (symbol) =>
     .replace(/-GB$/, "")
     .trim();
 
+const EVENT_ACTIVE_PAST_DAYS = 7;
+const EVENT_ACTIVE_FUTURE_DAYS = 30;
+const EVENT_ARCHIVE_PAST_DAYS = 30;
+
+const EVENT_MONTHS = {
+  Jan: "01",
+  Feb: "02",
+  Mar: "03",
+  Apr: "04",
+  May: "05",
+  Jun: "06",
+  Jul: "07",
+  Aug: "08",
+  Sep: "09",
+  Oct: "10",
+  Nov: "11",
+  Dec: "12",
+};
+
+const parseEventDate = (value) => {
+  if (!value) return null;
+
+  const text = String(value).trim();
+
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const dmy = text.match(/\b(\d{1,2})[-\s]([A-Za-z]{3,9})[-,\s]+(\d{4})\b/);
+  if (dmy) {
+    const [, dd, mon, yyyy] = dmy;
+    const month =
+      EVENT_MONTHS[
+        mon.slice(0, 3).charAt(0).toUpperCase() +
+          mon.slice(1, 3).toLowerCase()
+      ];
+    return month ? `${yyyy}-${month}-${dd.padStart(2, "0")}` : null;
+  }
+
+  const mdy = text.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s+(\d{4})\b/);
+  if (mdy) {
+    const [, mon, dd, yyyy] = mdy;
+    const month =
+      EVENT_MONTHS[
+        mon.slice(0, 3).charAt(0).toUpperCase() +
+          mon.slice(1, 3).toLowerCase()
+      ];
+    return month ? `${yyyy}-${month}-${dd.padStart(2, "0")}` : null;
+  }
+
+  const dotted = text.match(/\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b/);
+  if (dotted) {
+    const [, dd, mm, yyyy] = dotted;
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  }
+
+  return null;
+};
+
+const extractRecordDate = (text) => {
+  const clean = String(text || "");
+  const patterns = [
+    /record date.*?\b(\d{1,2}-[A-Za-z]{3,9}-\d{4})\b/i,
+    /record date.*?\b([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?[,]?\s+\d{4})\b/i,
+    /record date.*?\b(\d{1,2}[./]\d{1,2}[./]\d{4})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = clean.match(pattern);
+    if (match) return match[1];
+  }
+
+  return null;
+};
+
+const getEventEffectiveDate = (event) => {
+  const recordDate = parseEventDate(event?.recordDate);
+  const announcementDate = parseEventDate(event?.announcementDate);
+  const eventDate = parseEventDate(event?.date);
+
+  if (
+    (event?.type === "DIVIDEND" || event?.type === "RECORD") &&
+    recordDate
+  ) {
+    return recordDate;
+  }
+
+  return eventDate || announcementDate || recordDate;
+};
+
+const normalizeEvent = (event) => {
+  if (!event?.symbol) return null;
+
+  const date = getEventEffectiveDate(event);
+  if (!date) return null;
+
+  return {
+    ...event,
+    symbol: normalizeSymbol(event.symbol),
+    announcementDate:
+      parseEventDate(event.announcementDate) || event.announcementDate,
+    date,
+  };
+};
+
+const classifyEvents = (events) => {
+  const active = [];
+  const archive = [];
+  const unique = new Map();
+
+  for (const event of events || []) {
+    const normalized = normalizeEvent(event);
+    if (!normalized) continue;
+
+    const key = `${normalized.symbol}_${normalized.type}_${normalized.date}`;
+    unique.set(key, normalized);
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const event of unique.values()) {
+    const eventDate = new Date(event.date);
+    if (isNaN(eventDate)) continue;
+
+    eventDate.setHours(0, 0, 0, 0);
+    const diff = (eventDate - today) / (1000 * 60 * 60 * 24);
+
+    if (diff >= -EVENT_ACTIVE_PAST_DAYS && diff <= EVENT_ACTIVE_FUTURE_DAYS) {
+      active.push(event);
+    } else if (diff < -EVENT_ACTIVE_PAST_DAYS && diff >= -EVENT_ARCHIVE_PAST_DAYS) {
+      archive.push(event);
+    }
+  }
+
+  active.sort((a, b) => new Date(b.date) - new Date(a.date));
+  archive.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return {
+    active: active.slice(0, 200),
+    archive: archive.slice(0, 200),
+  };
+};
+
 const toFiniteNumber = (value) => {
   const raw =
     value && typeof value === "object" && "raw" in value ? value.raw : value;
@@ -109,48 +252,29 @@ const toYahooSymbol = (symbol) => {
 };
 
 const validateYahooSymbol = async (symbolRaw) => {
+  const symbol = normalizeSymbol(symbolRaw);
+  const yahooSym = toYahooSymbol(symbol);
 
-  const symbol =
-    normalizeSymbol(symbolRaw);
-
+  // ✅ FIX: use yahoo-finance2 which handles auth/headers properly
+  // Raw axios was getting 403 from Yahoo's bot detection
   try {
-
-    const yahooSymbol =
-      toYahooSymbol(symbol);
-
-    const response =
-      await axios.get(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-          yahooSymbol
-        )}?range=1d&interval=1d`,
-        {
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            Accept: "application/json",
-          },
-          timeout: 5000,
-        }
-      );
-
-    const result =
-      response.data?.chart?.result?.[0];
-
-    const meta =
-      result?.meta || {};
-
-    const price =
-      Number(meta.regularMarketPrice || 0);
-
-    return (
-      !!result &&
-      (
-        price > 0 ||
-        meta.symbol
-      )
+    const quote = await yahooFinance.quote(
+      yahooSym,
+      {},
+      { validateResult: false }  // allow non-standard schemas (ETFs, SGBs)
     );
+    const price = toFiniteNumber(quote?.regularMarketPrice);
+    // price > 0 = definitely valid; symbol present = listed but possibly market closed
+    if (price > 0 || quote?.symbol) return true;
+  } catch (_) {
+    // fall through to chart API
+  }
 
-  } catch (err) {
-
+  // ✅ Fallback: chart endpoint (works for SGBs and ETFs yahoo-finance2 rejects)
+  try {
+    const q = await fetchYahooChartQuote(symbol);
+    return q.currentPrice > 0;
+  } catch {
     return false;
   }
 };
@@ -208,14 +332,20 @@ const cachePrice = (quote, { persist = true } = {}) => {
 const fetchYahooChartQuote = async (symbolRaw) => {
   const symbol = normalizeSymbol(symbolRaw);
 
+  // ✅ FIX: Use full browser headers — Yahoo returns 403 on minimal User-Agent
   const response = await axios.get(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       toYahooSymbol(symbol)
     )}?range=1y&interval=1d`,
     {
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        Accept: "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        Referer: "https://finance.yahoo.com/",
+        Origin: "https://finance.yahoo.com",
       },
       timeout: 10000,
     }
@@ -263,7 +393,13 @@ const fetchYahooQuote = async (symbolRaw) => {
   let quote;
 
   try {
-    quote = await yahooFinance.quote(toYahooSymbol(symbol));
+    // ✅ validateResult: false — prevents yahoo-finance2 from throwing on
+    // non-standard schemas (SGBs, some ETFs, bonds) that have missing fields
+    quote = await yahooFinance.quote(
+      toYahooSymbol(symbol),
+      {},
+      { validateResult: false }
+    );
   } catch (err) {
     console.log(`[prices] Yahoo quote failed for ${symbol}: ${err.message}`);
     return fetchYahooChartQuote(symbol);
@@ -499,6 +635,8 @@ const createNseClient = () =>
   );
 
 const isNseBlocked = (err) => {
+  if (err?.nseBlocked) return true;
+
   const status = err?.response?.status;
   return status === 401 || status === 403 || status === 429;
 };
@@ -555,7 +693,7 @@ const fetchNseQuote = async (nse, symbol) => {
 
 const fetchStockPrice = async (
   symbolRaw,
-  { skipNse = false } = {}
+  { skipNse = false, nse: nseClient = null } = {}
 ) => {
 
   const symbol =
@@ -602,12 +740,14 @@ const fetchStockPrice = async (
   }
 
   // ✅ LAST RESORT: NSE
+  let nseError = null;
+
   if (!skipNse) {
 
     try {
 
       const nse =
-        createNseClient();
+        nseClient || createNseClient();
 
       await primeNseSession(
         nse,
@@ -630,6 +770,7 @@ const fetchStockPrice = async (
       );
 
     } catch (err) {
+      nseError = err;
 
       console.log(
         `[prices] NSE failed for ${symbol}: ${getNseErrorMessage(err)}`
@@ -651,9 +792,16 @@ const fetchStockPrice = async (
     };
   }
 
-  throw new Error(
+  const error = new Error(
     `No price source available for ${symbol}`
   );
+
+  if (isNseBlocked(nseError)) {
+    error.nseBlocked = true;
+    error.response = nseError.response;
+  }
+
+  throw error;
 };
 
 
@@ -826,6 +974,14 @@ app.post("/update-prices", async (req, res) => {
     let successCount = 0;
     let nseBlocked = false;
 
+    // Create one NSE client for the batch; fetchStockPrice receives it via options.
+    const nse = createNseClient();
+    try {
+      await primeNseSession(nse);
+    } catch (err) {
+      console.log("NSE cookie init failed:", getNseErrorMessage(err));
+    }
+
     for (const symbolRaw of symbols) {
       try {
         let symbol = symbolRaw;
@@ -907,13 +1063,10 @@ app.post("/update-prices", async (req, res) => {
           if (symbol.endsWith("-GB")) symbol = symbol.replace("-GB", "");
 
           try {
-            const quote =
-  await fetchStockPrice(
-    symbol,
-    {
-      skipNse: nseBlocked,
-    }
-  );
+            const quote = await fetchStockPrice(symbol, {
+              skipNse: nseBlocked,
+              nse,
+            });
 
             price = Number(quote.currentPrice) || 0;
             high52 = Number(quote.high52) || 0;
@@ -1101,11 +1254,6 @@ const fetchCorporateActions = async () => {
       }
     };
 
-    const extractRecordDate = (text) => {
-      const match = text.match(/(\d{1,2}-[A-Za-z]{3}-\d{4})/);
-      return match ? match[1] : null;
-    };
-
     // STEP 1: Normalize + classify fresh NSE data
     const parsed = data.map((item) => {
       const rawTitle = item.attchmntText || item.desc || "";
@@ -1131,79 +1279,40 @@ const fetchCorporateActions = async () => {
         type = "ACQUISITION";
       }
 
-    const announcementDate = item.sort_date
-  ? item.sort_date.split(" ")[0]
-  : null;
+      const announcementDate =
+        parseEventDate(
+          item.sort_date ||
+            item.an_dt ||
+            item.exchdisstime ||
+            item.dt ||
+            item.date
+        );
 
-const recordDate =
-  extractRecordDate(rawTitle);
+      const recordDate = extractRecordDate(rawTitle);
+      const recordDateIso = parseEventDate(recordDate);
+      const effectiveDate =
+        (type === "DIVIDEND" || type === "RECORD") && recordDateIso
+          ? recordDateIso
+          : announcementDate || recordDateIso;
 
-// ✅ Safe date normalizer
-const normalizeDate = (value) => {
+      return {
+        symbol,
+        type,
+        title: getCleanTitle(type),
+        rawTitle,
 
-  if (!value) return null;
+        announcementDate,
+        recordDate,
 
-  // Already ISO
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
-  }
-
-  // DD-MMM-YYYY
-  const match = value.match(
-    /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/
-  );
-
-  if (!match) return null;
-
-  const [, dd, mon, yyyy] = match;
-
-  const months = {
-    Jan: "01",
-    Feb: "02",
-    Mar: "03",
-    Apr: "04",
-    May: "05",
-    Jun: "06",
-    Jul: "07",
-    Aug: "08",
-    Sep: "09",
-    Oct: "10",
-    Nov: "11",
-    Dec: "12",
-  };
-
-  const month =
-    months[
-      mon.charAt(0).toUpperCase() +
-      mon.slice(1).toLowerCase()
-    ];
-
-  if (!month) return null;
-
-  return `${yyyy}-${month}-${dd.padStart(2, "0")}`;
-};
-
-const effectiveDate =
-  normalizeDate(
-    recordDate || announcementDate
-  );
-
-return {
-  symbol,
-  type,
-  title: getCleanTitle(type),
-  rawTitle,
-
-  announcementDate,
-  recordDate,
-
-  date: effectiveDate,
-};
+        date: effectiveDate,
+      };
 
 }); // ✅ IMPORTANT: closes parsed.map()
 
     // STEP 2: Keep only meaningful
-    const meaningful = parsed.filter((e) => e.type !== "OTHER");
+    const meaningful = parsed
+      .map(normalizeEvent)
+      .filter((e) => e && e.type !== "OTHER");
 
     // STEP 3: Deduplicate fresh batch (symbol + type + date)
     const freshMap = new Map();
@@ -1218,7 +1327,10 @@ return {
     const existingMap = new Map();
 
     // Seed existing map from current in-memory EVENTS (already disk-backed)
-    [...(EVENTS.active || []), ...(EVENTS.archive || [])].forEach((e) => {
+    [...(EVENTS.active || []), ...(EVENTS.archive || [])].forEach((event) => {
+      const e = normalizeEvent(event);
+      if (!e) return;
+
       const key = `${e.symbol}_${e.type}_${e.date}`;
       existingMap.set(key, e);
     });
@@ -1230,50 +1342,8 @@ return {
 
     const merged = Array.from(existingMap.values());
 
-    // STEP 5: Classify into active / archive based on date
-    const active = [];
-    const archive = [];
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    merged.forEach((e) => {
-      if (!e.date) return;
-
-      const eventDate = new Date(e.date);
-
-      if (isNaN(eventDate)) {
-        return;
-      }
-
-      eventDate.setHours(0, 0, 0, 0);
-
-      const diff = (eventDate - today) / (1000 * 60 * 60 * 24);
-
-      // Active: past 7 days to next 14 days
-      if (diff >= -7 && diff <= 14) {
-        active.push(e);
-      }
-      // Archive: older than 7 days, within 30 days
-      else if (diff < -7 && diff >= -30) {
-        archive.push(e);
-      }
-      // Older than 30 days: drop (expired)
-    });
-
-    active.sort(
-  (a, b) => new Date(b.date) - new Date(a.date)
-);
-
-archive.sort(
-  (a, b) => new Date(b.date) - new Date(a.date)
-);
-
-    // STEP 6: Store (limit size) and persist to disk
-    EVENTS = {
-      active,
-      archive,
-    };
+    // STEP 5: Classify into active / archive based on effective date
+    EVENTS = classifyEvents(merged);
 
     lastFetchTime = Date.now();
 

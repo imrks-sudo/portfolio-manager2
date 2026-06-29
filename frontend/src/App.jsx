@@ -1090,6 +1090,10 @@ const filteredArchive = events.archive.filter(e =>
   )
 );
 
+const hasFilteredEvents =
+  filteredActive.length > 0 ||
+  filteredArchive.length > 0;
+
 const validateManualSymbol = (symbol) => {
   if (!symbol || symbol.length < 3) {
     setManualValidation(null);
@@ -2811,7 +2815,7 @@ refreshProfiles();
     </div>
 
     {/* 🔄 LOADING */}
-    {events.active.length === 0 && events.archive.length === 0 ? (
+    {!hasFilteredEvents ? (
       <div style={{ padding: 10, fontSize: 12 }}>
         No recent updates
       </div>
