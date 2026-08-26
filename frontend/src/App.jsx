@@ -447,6 +447,15 @@ const fetchNiftyChange = async () => {
 };
 
   const [view, setView] = useState("dashboard");
+  const [showZerodhaModal, setShowZerodhaModal] = useState(false);
+  const [kiteApiKey, setKiteApiKey] = useState(() => localStorage.getItem("kite_api_key") || "");
+  const [kiteApiSecret, setKiteApiSecret] = useState("");
+  const [kiteRequestToken, setKiteRequestToken] = useState("");
+  const [kiteSessionId, setKiteSessionId] = useState(() => localStorage.getItem("kite_session_id") || "");
+  const [kiteUser, setKiteUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("kite_user") || "null"); } catch { return null; }
+  });
+  const [kiteSyncing, setKiteSyncing] = useState(false);
 
   const [previewData, setPreviewData] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -455,6 +464,30 @@ const fetchNiftyChange = async () => {
     .filter((k) => k.startsWith("portfolio_"))
     .map((k) => k.replace("portfolio_", ""));
   });
+
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const requestToken = params.get("request_token");
+  const status = params.get("status");
+  const returnedApiKey = params.get("api_key") || localStorage.getItem("kite_api_key") || "";
+
+  if (requestToken && status === "success") {
+    setKiteRequestToken(requestToken);
+    setKiteApiKey(returnedApiKey);
+    setShowZerodhaModal(true);
+
+    // Remove one-time token from the visible URL.
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}, []);
+
+useEffect(() => {
+  if (!kiteSessionId) return;
+  // Keep the existing local-first model: a successful broker sync simply
+  // becomes another local portfolio update.
+  localStorage.setItem("kite_session_id", kiteSessionId);
+}, [kiteSessionId]);
+
 
 useEffect(() => {
   const handleClickOutside = (event) => {
@@ -1205,6 +1238,182 @@ useEffect(() => {
   futureValue > 0
     ? Math.min((totalValue / futureValue) * 100, 100)
     : 0;
+
+  const openZerodhaLogin = () => {
+    const apiKey = kiteApiKey.trim();
+    if (!apiKey) {
+      alert("Enter your Zerodha API Key first.");
+      return;
+    }
+
+    localStorage.setItem("kite_api_key", apiKey);
+    setKiteApiKey(apiKey);
+
+    const redirectParams = new URLSearchParams({ api_key: apiKey }).toString();
+    const loginUrl =
+      `https://kite.zerodha.com/connect/login?v=3&api_key=${encodeURIComponent(apiKey)}` +
+      `&redirect_params=${encodeURIComponent(redirectParams)}`;
+
+    // The redirect URL must be registered in the user's Kite Developer app.
+    window.location.href = loginUrl;
+  };
+
+  const completeZerodhaConnection = async () => {
+    if (!kiteApiKey.trim() || !kiteApiSecret.trim() || !kiteRequestToken.trim()) {
+      alert("API Key, API Secret and Request Token are required.");
+      return;
+    }
+
+    try {
+      setKiteSyncing(true);
+      const res = await fetch(`${API_URL}/api/kite/session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(import.meta.env.VITE_API_KEY && { "x-api-key": import.meta.env.VITE_API_KEY }),
+        },
+        body: JSON.stringify({
+          apiKey: kiteApiKey.trim(),
+          apiSecret: kiteApiSecret.trim(),
+          requestToken: kiteRequestToken.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Zerodha authentication failed");
+      }
+
+      setKiteSessionId(json.sessionId);
+      setKiteUser(json.user || null);
+      localStorage.setItem("kite_session_id", json.sessionId);
+      localStorage.setItem("kite_user", JSON.stringify(json.user || null));
+
+      // Never persist the API secret.
+      setKiteApiSecret("");
+      setKiteRequestToken("");
+      setShowZerodhaModal(false);
+
+      await syncZerodhaHoldings(json.sessionId);
+    } catch (err) {
+      console.error("❌ Zerodha connection failed:", err);
+      alert(`❌ Zerodha connection failed: ${err.message}`);
+    } finally {
+      setKiteSyncing(false);
+    }
+  };
+
+  const syncZerodhaHoldings = async (sessionId = kiteSessionId) => {
+    if (!sessionId) {
+      alert("Connect your Zerodha account first.");
+      return;
+    }
+
+    try {
+      setKiteSyncing(true);
+      const res = await fetch(`${API_URL}/api/kite/holdings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(import.meta.env.VITE_API_KEY && { "x-api-key": import.meta.env.VITE_API_KEY }),
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        if (res.status === 401) {
+          localStorage.removeItem("kite_session_id");
+          localStorage.removeItem("kite_user");
+          setKiteSessionId("");
+          setKiteUser(null);
+        }
+        throw new Error(json.error || "Unable to fetch Zerodha holdings");
+      }
+
+      const imported = (json.holdings || [])
+        .filter((h) => h.symbol && Number(h.quantity) > 0)
+        .map((h) => ({
+          symbol: h.symbol,
+          quantity: Number(h.quantity) || 0,
+          avgPrice: Number(h.avgPrice) || 0,
+          currentPrice: Number(h.currentPrice) || 0,
+          currentValue: Number(h.currentValue) || 0,
+          pnl: Number(h.pnl) || 0,
+          dailyChange: Number(h.dailyChange) || 0,
+          dailyPct: Number(h.dailyPct) || 0,
+          sector: h.sector || "-",
+          source: "zerodha",
+          assetType: h.assetType || "stock",
+          isin: h.isin,
+        }));
+
+      if (!imported.length) {
+        alert("⚠️ Zerodha returned no current holdings.");
+        return;
+      }
+
+      // Safe merge behaviour:
+      // - If the current portfolio is already entirely Zerodha-sourced, sync is an exact replacement.
+      // - Otherwise, update/add Zerodha symbols while preserving unrelated local holdings.
+      const onlyZerodha = cleanData.length > 0 && cleanData.every((h) => h.source === "zerodha");
+      let synced;
+
+      if (onlyZerodha || cleanData.length === 0) {
+        synced = imported;
+      } else {
+        const map = new Map(cleanData.map((h) => [normalizeSymbol(h.symbol), h]));
+        imported.forEach((h) => {
+          const key = normalizeSymbol(h.symbol);
+          const existing = map.get(key);
+          map.set(key, {
+            ...(existing || {}),
+            ...h,
+            sector: h.sector === "-" && existing?.sector ? existing.sector : h.sector,
+          });
+        });
+        synced = Array.from(map.values());
+      }
+
+      setData(synced);
+      saveLocalPortfolio(synced);
+      refreshProfiles();
+      setLastUpdated(new Date());
+
+      alert(`✅ Zerodha sync complete: ${imported.length} holdings received.`);
+    } catch (err) {
+      console.error("❌ Zerodha sync failed:", err);
+      alert(`❌ Zerodha sync failed: ${err.message}`);
+    } finally {
+      setKiteSyncing(false);
+    }
+  };
+
+  const disconnectZerodha = async () => {
+    try {
+      if (kiteSessionId) {
+        await fetch(`${API_URL}/api/kite/disconnect`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(import.meta.env.VITE_API_KEY && { "x-api-key": import.meta.env.VITE_API_KEY }),
+          },
+          body: JSON.stringify({ sessionId: kiteSessionId }),
+        });
+      }
+    } catch (err) {
+      console.warn("Kite disconnect cleanup failed:", err);
+    } finally {
+      localStorage.removeItem("kite_session_id");
+      localStorage.removeItem("kite_user");
+      localStorage.removeItem("kite_api_key");
+      setKiteSessionId("");
+      setKiteUser(null);
+      setKiteApiKey("");
+      setKiteApiSecret("");
+      setKiteRequestToken("");
+    }
+  };
 
   const handleUpdatePrices = async () => {
     posthog.capture('update_prices_clicked');
@@ -1957,6 +2166,28 @@ if (!profile) {
     <span>Support</span>
   </div>
 
+  {/* ZERODHA CONNECTION */}
+  <div
+    onClick={() => {
+      setShowZerodhaModal(true);
+      setSidebarOpen(false);
+    }}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "8px 10px",
+      borderRadius: 8,
+      cursor: "pointer",
+      marginTop: 4,
+      background: "transparent",
+      color: theme.text,
+    }}
+  >
+    <span style={{ width: 18, textAlign: "center" }}>🔗</span>
+    <span>{kiteSessionId ? "Zerodha Connected" : "Connect Zerodha"}</span>
+  </div>
+
   {/* THEME TOGGLE */}
   
    <div
@@ -2468,6 +2699,108 @@ refreshProfiles();
 </div>
 
 
+        {/* ZERODHA CONNECTION MODAL */}
+        {showZerodhaModal && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 300,
+              padding: 16,
+            }}
+            onClick={() => !kiteSyncing && setShowZerodhaModal(false)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(460px, 100%)",
+                maxHeight: "90vh",
+                overflowY: "auto",
+                background: theme.card,
+                color: theme.text,
+                border: `1px solid ${theme.border}`,
+                borderRadius: 14,
+                padding: 20,
+                boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: 18 }}>🔗 Connect Zerodha</h2>
+              <p style={{ fontSize: 12, color: theme.subText, lineHeight: 1.6 }}>
+                Use a Zerodha Kite Connect Personal app. WatchMyFolio uses Zerodha's
+                login flow and fetches holdings through its backend because Kite APIs
+                cannot be called directly from a browser.
+              </p>
+
+              <label style={{ display: "block", fontSize: 12, marginTop: 12 }}>API Key</label>
+              <input
+                value={kiteApiKey}
+                onChange={(e) => setKiteApiKey(e.target.value.trim())}
+                placeholder="Your Kite API key"
+                disabled={Boolean(kiteRequestToken)}
+                style={{ width: "100%", boxSizing: "border-box", marginTop: 5, padding: 9, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.bg, color: theme.text }}
+              />
+
+              {!kiteRequestToken ? (
+                <>
+                  <p style={{ fontSize: 11, color: theme.subText, lineHeight: 1.5 }}>
+                    Register this redirect URL in your Kite app before continuing:
+                    <br /><b>{window.location.origin}/</b>
+                  </p>
+                  <button
+                    onClick={openZerodhaLogin}
+                    style={{ width: "100%", marginTop: 8, padding: 10, border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", cursor: "pointer" }}
+                  >
+                    Continue to Zerodha Login →
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: dark ? "#0f172a" : "#eff6ff", fontSize: 12 }}>
+                    ✅ Zerodha login completed. Enter your API Secret to finish the one-time token exchange.
+                  </div>
+                  <label style={{ display: "block", fontSize: 12, marginTop: 12 }}>API Secret</label>
+                  <input
+                    type="password"
+                    value={kiteApiSecret}
+                    onChange={(e) => setKiteApiSecret(e.target.value)}
+                    placeholder="Your Kite API secret"
+                    autoComplete="off"
+                    style={{ width: "100%", boxSizing: "border-box", marginTop: 5, padding: 9, borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.bg, color: theme.text }}
+                  />
+                  <p style={{ fontSize: 11, color: theme.subText, lineHeight: 1.5 }}>
+                    The API Secret is not saved in localStorage. It is sent over HTTPS to
+                    WatchMyFolio only for the token exchange and is discarded afterward.
+                  </p>
+                  <button
+                    onClick={completeZerodhaConnection}
+                    disabled={kiteSyncing}
+                    style={{ width: "100%", marginTop: 8, padding: 10, border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", cursor: kiteSyncing ? "not-allowed" : "pointer", opacity: kiteSyncing ? 0.7 : 1 }}
+                  >
+                    {kiteSyncing ? "⏳ Connecting..." : "Connect & Sync Holdings"}
+                  </button>
+                </>
+              )}
+
+              {kiteSessionId && !kiteRequestToken && (
+                <button
+                  onClick={disconnectZerodha}
+                  style={{ width: "100%", marginTop: 8, padding: 9, border: `1px solid #ef4444`, borderRadius: 8, background: "transparent", color: "#ef4444", cursor: "pointer" }}
+                >
+                  Disconnect Zerodha
+                </button>
+              )}
+
+              <p style={{ fontSize: 10, color: theme.subText, marginTop: 14 }}>
+                Note: Zerodha access tokens expire at 6 AM the next day, so you may need to reconnect daily.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* DASHBOARD */}
         {view === "dashboard" && (
   <>
@@ -2514,6 +2847,27 @@ refreshProfiles();
       style={{ display: "none" }}
     />
   </label>
+
+  {/* ZERODHA SYNC */}
+  <button
+    onClick={() => {
+      if (kiteSessionId) syncZerodhaHoldings();
+      else { setShowZerodhaModal(true); setKiteRequestToken(""); }
+    }}
+    disabled={kiteSyncing}
+    style={{
+      padding: "6px 12px",
+      borderRadius: 8,
+      border: `1px solid ${theme.border}`,
+      background: theme.card,
+      color: theme.text,
+      fontSize: 12,
+      cursor: kiteSyncing ? "not-allowed" : "pointer",
+      opacity: kiteSyncing ? 0.7 : 1
+    }}
+  >
+    {kiteSyncing ? "⏳ Zerodha..." : kiteSessionId ? "🔄 Sync Zerodha" : "🔗 Connect Zerodha"}
+  </button>
 
   {/* UPDATE BUTTON */}
   <button
